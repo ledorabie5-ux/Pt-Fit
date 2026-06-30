@@ -81,6 +81,311 @@ export const EXERCISE_LIBRARY: LibraryExercise[] = [
     name: "Kettlebell Wood Chopper",
     muscle: "Obliques",
     videoUrl: "https://files.catbox.moe/zaf8hg.mp4"
+  },
+  // Chest
+  {
+    name: "Bench press",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/rgdpam.mp4"
+  },
+  {
+    name: "Push up",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/u8pc3r.mp4"
+  },
+  {
+    name: "Dumbbell incline bench press",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/uymtli.mp4"
+  },
+  {
+    name: "Machine pes fly",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/qy4o7j.mp4"
+  },
+  {
+    name: "Dumbbell incline chest flys",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/czgs9n.mp4"
+  },
+  {
+    name: "Barbell incline bench press",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/zowl03.mp4"
+  },
+  {
+    name: "Cable chest press",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/3cwntq.mp4"
+  },
+  {
+    name: "Cable pec fly",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/mgjno4.mp4"
+  },
+  {
+    name: "Dips",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/h0oghv.mp4"
+  },
+  {
+    name: "Dumbbell bench press",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/erwsxa.mp4"
+  },
+  {
+    name: "Kettlebll chest press Single",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/ryb4qy.mp4"
+  },
+  {
+    name: "Neutral chest press",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/w9kpnj.mp4"
+  },
+  {
+    name: "Smith machine bench press",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/bjsdzk.mp4"
+  },
+  {
+    name: "Smith machine incline bench press",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/dkifls.mp4"
+  },
+  {
+    name: "Machine machine plate loaded low incline bench press",
+    muscle: "Chest",
+    videoUrl: "https://files.catbox.moe/7rmgey.mp4"
+  },
+  // Back
+  {
+    name: "Cable lat prayer",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/bv6nod.mp4"
+  },
+  {
+    name: "Push ups (Back focus)",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/rupplj.mp4"
+  },
+  {
+    name: "Machine Pull down",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/pad4xc.mp4"
+  },
+  {
+    name: "Barbell bent over row",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/5k7ljx.mp4"
+  },
+  {
+    name: "Machine seated cable row",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/rzi50q.mp4"
+  },
+  {
+    name: "Kettlebll pull over",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/1hhia1.mp4"
+  },
+  {
+    name: "Dumbbell kneeling single arm row",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/g35lnk.mp4"
+  },
+  {
+    name: "Dumbbell shoulder extension",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/cpg16h.mp4"
+  },
+  {
+    name: "Dumbbell single arm row",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/945i7j.mp4"
+  },
+  {
+    name: "Smith machine over hand row",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/brxcdy.mp4"
+  },
+  {
+    name: "Smith machine inverted row",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/dq1efg.mp4"
+  },
+  {
+    name: "Machine chest supported t-bar row",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/icftmp.mp4"
+  },
+  {
+    name: "Machine plate loaded pulldown",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/vgkpqx.mp4"
+  },
+  {
+    name: "Cables kayakrow",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/u7pu4n.mp4"
+  },
+  {
+    name: "Barbell deadlift",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/4c5fl4.mp4"
+  },
+  {
+    name: "Machine back extensions",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/kujd1z.mp4"
+  },
+  {
+    name: "Cables pull-through",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/cw6o4h.mp4"
+  },
+  {
+    name: "Barbell low bar good morning",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/p1spiz.mp4"
+  },
+  {
+    name: "Supermans",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/yiy2uv.mp4"
+  },
+  {
+    name: "Machine face pulls",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/xix6f3.mp4"
+  },
+  {
+    name: "Machine reverse fly",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/dkt9x6.mp4"
+  },
+  {
+    name: "Dumbbells seated rear delt fly",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/wcgqhu.mp4"
+  },
+  {
+    name: "Cables rear delt fly",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/r995az.mp4"
+  },
+  {
+    name: "Dumbbell rear delt row",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/zpdqvi.mp4"
+  },
+  {
+    name: "Dumbbell laying reverse fly",
+    muscle: "Back",
+    videoUrl: "https://files.catbox.moe/857k73.mp4"
+  },
+  // Traps
+  {
+    name: "Barbell Silverback Shrug",
+    muscle: "Traps",
+    videoUrl: "https://files.catbox.moe/21jmer.mp4"
+  },
+  {
+    name: "Cables 30 Degree Shrug",
+    muscle: "Traps",
+    videoUrl: "https://files.catbox.moe/hrue58.mp4"
+  },
+  {
+    name: "Dumbbells Shrug",
+    muscle: "Traps",
+    videoUrl: "https://files.catbox.moe/tsq4v8.mp4"
+  },
+  {
+    name: "Barbell Upright Row",
+    muscle: "Traps",
+    videoUrl: "https://files.catbox.moe/oa11ve.mp4"
+  },
+  {
+    name: "Kettlebell Incline Shrug",
+    muscle: "Traps",
+    videoUrl: "https://files.catbox.moe/gy31yt.mp4"
+  },
+  // Triceps
+  {
+    name: "Cable Push Down",
+    muscle: "Triceps",
+    videoUrl: "https://files.catbox.moe/evbrhz.mp4"
+  },
+  {
+    name: "Barbell Close Grip Bench Press",
+    muscle: "Triceps",
+    videoUrl: "https://files.catbox.moe/co64pb.mp4"
+  },
+  {
+    name: "Dumbbell Skullcrusher",
+    muscle: "Triceps",
+    videoUrl: "https://files.catbox.moe/bwjumm.mp4"
+  },
+  {
+    name: "Bench Dips",
+    muscle: "Triceps",
+    videoUrl: "https://files.catbox.moe/kxts0z.mp4"
+  },
+  {
+    name: "Cable Overhead Tricep Extension",
+    muscle: "Triceps",
+    videoUrl: "https://files.catbox.moe/zv967z.mp4"
+  },
+  {
+    name: "Diamond Push Ups",
+    muscle: "Triceps",
+    videoUrl: "https://files.catbox.moe/08506t.mp4"
+  },
+  {
+    name: "Kettlebell Decline Skull Crusher",
+    muscle: "Triceps",
+    videoUrl: "https://files.catbox.moe/bxe8fv.mp4"
+  },
+  // Shoulders
+  {
+    name: "Dumbbell Seated Overhead Press",
+    muscle: "Shoulders",
+    videoUrl: "https://files.catbox.moe/hv3fpu.mp4"
+  },
+  {
+    name: "Cable Lateral Raise",
+    muscle: "Shoulders",
+    videoUrl: "https://files.catbox.moe/sn15z3.mp4"
+  },
+  {
+    name: "Barbell Overhead Press",
+    muscle: "Shoulders",
+    videoUrl: "https://files.catbox.moe/w1eo4y.mp4"
+  },
+  {
+    name: "Machine Overhand",
+    muscle: "Shoulders",
+    videoUrl: "https://files.catbox.moe/50we2o.mp4"
+  },
+  {
+    name: "Dumbbell Lateral Raise",
+    muscle: "Shoulders",
+    videoUrl: "https://files.catbox.moe/wu9g6k.mp4"
+  },
+  {
+    name: "Dumbbell Full Lateral Raise",
+    muscle: "Shoulders",
+    videoUrl: "https://files.catbox.moe/8hg3cp.mp4"
+  },
+  {
+    name: "Dumbbell Incline Front Raise",
+    muscle: "Shoulders",
+    videoUrl: "https://files.catbox.moe/kf76jj.mp4"
+  },
+  {
+    name: "Dumbbell Arnold Press",
+    muscle: "Shoulders",
+    videoUrl: "https://files.catbox.moe/0n3gs1.mp4"
   }
 ];
 
@@ -90,6 +395,7 @@ export const MUSCLE_GROUPS = [
   "Chest",
   "Back",
   "Shoulders",
+  "Traps",
   "Legs",
   "Biceps",
   "Triceps"
