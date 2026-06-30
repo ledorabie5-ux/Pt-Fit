@@ -386,6 +386,152 @@ export const EXERCISE_LIBRARY: LibraryExercise[] = [
     name: "Dumbbell Arnold Press",
     muscle: "Shoulders",
     videoUrl: "https://files.catbox.moe/0n3gs1.mp4"
+  },
+  // Legs
+  {
+    name: "Machine Leg Extension",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/6y92ou.mp4"
+  },
+  {
+    name: "Barbell Squat",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/ryt3rf.mp4"
+  },
+  {
+    name: "Dumbbell Goblet Squat",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/774p4x.mp4"
+  },
+  {
+    name: "Barbell Step Up",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/jwzcas.mp4"
+  },
+  {
+    name: "Machine Leg Press",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/cnwvwn.mp4"
+  },
+  {
+    name: "Forward Lunges",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/s2gyjv.mp4"
+  },
+  {
+    name: "Bodyweight Squat",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/xcmn69.mp4"
+  },
+  {
+    name: "Barbell Curtsy Lunge",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/c7sgmt.mp4"
+  },
+  {
+    name: "Dumbbell Bulgarian Split Squat",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/ntz6b7.mp4"
+  },
+  {
+    name: "Machine Hack Squat",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/mc86ro.mp4"
+  },
+  {
+    name: "Dumbbell Glute Bridge",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/np1nue.mp4"
+  },
+  {
+    name: "Barbell Sumo Deadlift",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/t5drfk.mp4"
+  },
+  {
+    name: "Machine Horizontal Leg Press",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/3fwcff.mp4"
+  },
+  {
+    name: "Kettlebell Lateral Lunge Single",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/n11fip.mp4"
+  },
+  {
+    name: "Cable Standing Leg Extension",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/rykxgh.mp4"
+  },
+  {
+    name: "Dumbbell Goblet Bulgarian Split Squat",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/7l4o0t.mp4"
+  },
+  {
+    name: "Jump Squats",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/jmmwx3.mp4"
+  },
+  {
+    name: "Machine Standing Calf Raises",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/kqtwyq.mp4"
+  },
+  {
+    name: "Machine Seated Calf Raise",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/qt2n8n.mp4"
+  },
+  {
+    name: "Barbell Calf Raises",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/avmk3x.mp4"
+  },
+  {
+    name: "Kettlebell Seated Calf Raise",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/s4fk8b.mp4"
+  },
+  {
+    name: "Machine Horizontal Leg Press Calf Jump",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/op5paw.mp4"
+  },
+  {
+    name: "Smith Machine Calf Raise",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/l50ypy.mp4"
+  },
+  {
+    name: "Barbell Stiff Leg Deadlift",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/edhebx.mp4"
+  },
+  {
+    name: "Machine Glute Ham Raise",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/d9sih0.mp4"
+  },
+  {
+    name: "Machine Hamstring Curl",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/t3c6bf.mp4"
+  },
+  {
+    name: "Barbell Romanian Deadlift",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/gjsh3k.mp4"
+  },
+  {
+    name: "Barbell Hip Thrust",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/ab764w.mp4"
+  },
+  {
+    name: "Cable Pull Through",
+    muscle: "Legs",
+    videoUrl: "https://files.catbox.moe/cw6o4h.mp4"
   }
 ];
 
