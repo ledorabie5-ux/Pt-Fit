@@ -1,0 +1,136 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about a registered user (coach, trainee, or admin).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique Firebase Auth identifier for the user." },
+        "name": { "type": "string", "description": "User's full name." },
+        "email": { "type": "string", "description": "User's registered email address." },
+        "phone": { "type": "string", "description": "User's contact phone number." },
+        "role": { "type": "string", "enum": ["coach", "trainee", "admin"], "description": "The role of the user." },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "description": "The approval status of the user account." },
+        "createdAt": { "type": "string", "description": "Timestamp when the user account was registered." },
+        "subscriptionStatus": { "type": "string", "enum": ["active", "expired"], "description": "Trainee subscription status." },
+        "subscriptionExpiry": { "type": "string", "description": "Timestamp of the subscription expiration." },
+        "subscriptionDuration": { "type": "string", "description": "Trainee's subscription duration package." },
+        "coachId": { "type": "string", "description": "The assigned coach's user ID." },
+        "coachName": { "type": "string", "description": "The assigned coach's full name." }
+      },
+      "required": ["uid", "name", "email", "phone", "role", "status", "createdAt"]
+    },
+    "Program": {
+      "title": "Training & Diet Program",
+      "description": "A coach-assigned fitness training program and diet schedule.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The program ID, matching the trainee ID." },
+        "traineeId": { "type": "string", "description": "The ID of the trainee." },
+        "coachId": { "type": "string", "description": "The ID of the assigning coach." },
+        "workoutDays": { "type": "array", "description": "List of workout days with exercise routines." },
+        "dietMeals": { "type": "array", "description": "List of daily diet meals." },
+        "updatedAt": { "type": "string", "description": "Timestamp of the last plan update." }
+      },
+      "required": ["id", "traineeId", "coachId", "workoutDays", "dietMeals", "updatedAt"]
+    },
+    "ProgressLog": {
+      "title": "Progress Log",
+      "description": "A logged activity or workout day completion record filled by the trainee.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique progress log entry ID." },
+        "traineeId": { "type": "string", "description": "The ID of the trainee." },
+        "traineeName": { "type": "string", "description": "The name of the trainee." },
+        "workoutDayId": { "type": "string", "description": "The workout day template ID." },
+        "workoutDayName": { "type": "string", "description": "The workout day template name." },
+        "completedAt": { "type": "string", "description": "Timestamp of log entry." },
+        "notes": { "type": "string", "description": "User notes or observations." },
+        "coachFeedback": { "type": "string", "description": "Feedback comments from the coach." }
+      },
+      "required": ["id", "traineeId", "traineeName", "workoutDayId", "workoutDayName", "completedAt"]
+    },
+    "Message": {
+      "title": "Chat Message",
+      "description": "An individual instant chat message exchanged between a coach and a trainee.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The message unique ID." },
+        "chatId": { "type": "string", "description": "The chat identifier (sorted sender_receiver)." },
+        "senderId": { "type": "string", "description": "The user ID of the sender." },
+        "text": { "type": "string", "description": "The chat message content text." },
+        "createdAt": { "type": "string", "description": "The creation timestamp." }
+      },
+      "required": ["id", "chatId", "senderId", "text", "createdAt"]
+    },
+    "Chat": {
+      "title": "Chat Summary",
+      "description": "Metadata summarizing active chat channels and latest activity.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The ID of the chat channel." },
+        "participants": { "type": "array", "description": "User IDs involved in the chat." },
+        "lastMessage": { "type": "string", "description": "The snippet of the last message sent." },
+        "lastMessageAt": { "type": "string", "description": "The timestamp of the last message sent." }
+      },
+      "required": ["id", "participants", "lastMessage", "lastMessageAt"]
+    },
+    "AppNotification": {
+      "title": "Application Notification",
+      "description": "An alert notification pushed to a user's notification center.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique notification ID." },
+        "userId": { "type": "string", "description": "The target recipient user ID." },
+        "title": { "type": "string", "description": "Title of the alert." },
+        "body": { "type": "string", "description": "Detail body text of the alert." },
+        "read": { "type": "boolean", "description": "Whether the notification has been read." },
+        "createdAt": { "type": "string", "description": "Timestamp of notification dispatch." }
+      },
+      "required": ["id", "userId", "title", "body", "read", "createdAt"]
+    },
+    "ExerciseVideo": {
+      "title": "Exercise Video",
+      "description": "An exercise video showing the technique for a workout exercise.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique video reference identifier." },
+        "name": { "type": "string", "description": "Name of the exercise." },
+        "muscleGroup": { "type": "string", "description": "The target muscle group." },
+        "videoUrl": { "type": "string", "description": "Video guide URL." },
+        "createdAt": { "type": "string", "description": "Timestamp of video creation." }
+      },
+      "required": ["id", "name", "muscleGroup", "videoUrl", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Access to registered user profile documents."
+    },
+    "programs": {
+      "schema": { "$ref": "#/entities/Program" },
+      "description": "Access to training and nutrition program sheets."
+    },
+    "progress": {
+      "schema": { "$ref": "#/entities/ProgressLog" },
+      "description": "Access to trainee workouts completion logging history."
+    },
+    "messages": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Access to chat dialogue messages records."
+    },
+    "chats": {
+      "schema": { "$ref": "#/entities/Chat" },
+      "description": "Access to user chat summaries metadata."
+    },
+    "notifications": {
+      "schema": { "$ref": "#/entities/AppNotification" },
+      "description": "Access to trainee alert message boxes."
+    },
+    "exercise_videos": {
+      "schema": { "$ref": "#/entities/ExerciseVideo" },
+      "description": "Access to stored video demonstration guides."
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-ptfit-f9fbe178-4842-4adc-9fe7-de6df2beec92",
+      "rules": "firestore.rules"
+    },
+    {
+      "database": "remixed-firestore-database-id",
+      "rules": "firestore.rules"
+    }
+  ]
+}
