@@ -532,6 +532,42 @@ export const EXERCISE_LIBRARY: LibraryExercise[] = [
     name: "Cable Pull Through",
     muscle: "Legs",
     videoUrl: "https://files.catbox.moe/cw6o4h.mp4"
+  },
+  // Biceps
+  {
+    name: "Barbell Curl",
+    muscle: "Biceps",
+    videoUrl: "https://files.catbox.moe/9gief4.mp4"
+  },
+  {
+    name: "Dumbbell Preacher Curl",
+    muscle: "Biceps",
+    videoUrl: "https://files.catbox.moe/9u35to.mp4"
+  },
+  {
+    name: "Dumbbell Incline Curl",
+    muscle: "Biceps",
+    videoUrl: "https://files.catbox.moe/xogc5g.mp4"
+  },
+  {
+    name: "Dumbbell Hammer Curl",
+    muscle: "Biceps",
+    videoUrl: "https://files.catbox.moe/bq5blj.mp4"
+  },
+  {
+    name: "Dumbbell Curl",
+    muscle: "Biceps",
+    videoUrl: "https://files.catbox.moe/2a1zjf.mp4"
+  },
+  {
+    name: "Dumbbell Reverse Curl",
+    muscle: "Biceps",
+    videoUrl: "https://files.catbox.moe/3ms08m.mp4"
+  },
+  {
+    name: "Bayesian Curl",
+    muscle: "Biceps",
+    videoUrl: "https://files.catbox.moe/en9yw6.mp4"
   }
 ];
 
