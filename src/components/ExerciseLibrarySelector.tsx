@@ -1,20 +1,35 @@
 import React, { useState, useRef } from "react";
 import { EXERCISE_LIBRARY, MUSCLE_GROUPS, LibraryExercise } from "../constants/exerciseLibrary";
+import { Language } from "../types";
 import { Play, Plus, Search, Video, X, Flame } from "lucide-react";
 
 interface ExerciseLibrarySelectorProps {
+  lang?: Language;
   onSelect: (name: string, videoUrl: string) => void;
   onAddDirectly?: (name: string, videoUrl: string) => void;
   selectedName?: string;
   selectedVideoUrl?: string;
 }
 
+const MUSCLE_TRANSLATIONS: Record<string, string> = {
+  Abs: "البطن",
+  Chest: "الصدر",
+  Back: "الظهر",
+  Shoulders: "الأكتاف",
+  Biceps: "البايسبس",
+  Triceps: "الترايسبس",
+  Legs: "الأرجل",
+  Cardio: "الكارديو"
+};
+
 export default function ExerciseLibrarySelector({
+  lang,
   onSelect,
   onAddDirectly,
   selectedName,
   selectedVideoUrl
 }: ExerciseLibrarySelectorProps) {
+  const isAr = lang === "ar";
   const [selectedMuscle, setSelectedMuscle] = useState<string>("Abs");
   const [searchQuery, setSearchQuery] = useState("");
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
@@ -33,9 +48,12 @@ export default function ExerciseLibrarySelector({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-neutral-800">
         <div>
           <h4 className="text-xs font-bold text-white flex items-center gap-1.5 uppercase font-mono tracking-wider">
-            <Flame className="h-4 w-4 text-emerald-500 animate-pulse" /> Exercise Video Library
+            <Flame className="h-4 w-4 text-emerald-500 animate-pulse" />
+            {isAr ? "مكتبة فيديوهات التمارين" : "Exercise Video Library"}
           </h4>
-          <p className="text-[10px] text-neutral-400">Select an exercise to populate details or quick-add with one click.</p>
+          <p className="text-[10px] text-neutral-400">
+            {isAr ? "اختر تمريناً لتعبئة تفاصيله أو إضافته بضغطة زر." : "Select an exercise to populate details or quick-add with one click."}
+          </p>
         </div>
         
         <div className="relative w-full sm:w-60">
@@ -44,7 +62,7 @@ export default function ExerciseLibrarySelector({
           </span>
           <input
             type="text"
-            placeholder="Search exercises..."
+            placeholder={isAr ? "ابحث عن تمرين..." : "Search exercises..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-neutral-950 border border-neutral-800 rounded pl-8 pr-3 py-1 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500"
@@ -54,11 +72,14 @@ export default function ExerciseLibrarySelector({
 
       {/* Muscle Group Tabs */}
       <div className="space-y-1.5">
-        <span className="text-[9px] font-bold text-neutral-400 uppercase font-mono tracking-wider">Select Muscle Group:</span>
+        <span className="text-[9px] font-bold text-neutral-400 uppercase font-mono tracking-wider">
+          {isAr ? "اختر العضلة المستهدفة:" : "Select Muscle Group:"}
+        </span>
         <div className="flex flex-wrap gap-1">
           {MUSCLE_GROUPS.map(muscle => {
             const count = EXERCISE_LIBRARY.filter(ex => ex.muscle === muscle).length;
             const isSelected = selectedMuscle === muscle;
+            const displayName = isAr ? (MUSCLE_TRANSLATIONS[muscle] || muscle) : muscle;
             return (
               <button
                 type="button"
@@ -70,7 +91,7 @@ export default function ExerciseLibrarySelector({
                     : "bg-neutral-950 border-neutral-850 text-neutral-400 hover:text-white hover:border-neutral-700"
                 }`}
               >
-                {muscle}
+                {displayName}
                 <span className={`text-[9px] px-1 rounded-full ${
                   isSelected ? "bg-emerald-800/60 text-emerald-300" : "bg-neutral-850 text-neutral-500"
                 }`}>
@@ -116,7 +137,7 @@ export default function ExerciseLibrarySelector({
                   
                   {/* Floating badge for muscle */}
                   <span className="absolute top-1.5 left-1.5 bg-black/70 backdrop-blur-sm text-neutral-400 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded">
-                    {ex.muscle}
+                    {isAr ? (MUSCLE_TRANSLATIONS[ex.muscle] || ex.muscle) : ex.muscle}
                   </span>
 
                   {/* Play preview button Overlay */}
@@ -127,13 +148,13 @@ export default function ExerciseLibrarySelector({
                       setPreviewVideoName(ex.name);
                     }}
                     className="absolute inset-0 m-auto h-8 w-8 bg-black/60 hover:bg-emerald-600/90 text-white rounded-full flex items-center justify-center backdrop-blur-sm transition-all scale-95 opacity-80 group-hover:opacity-100 group-hover:scale-100 cursor-pointer shadow-md"
-                    title="Preview Full Video"
+                    title={isAr ? "معاينة الفيديو" : "Preview Full Video"}
                   >
                     <Play className="h-3.5 w-3.5 fill-current ml-0.5" />
                   </button>
 
                   <span className="absolute bottom-1 right-1 text-[8px] text-white/50 bg-black/60 px-1 rounded pointer-events-none">
-                    hover to play
+                    {isAr ? "مرر للمعاينة" : "hover to play"}
                   </span>
                 </div>
 
@@ -142,7 +163,7 @@ export default function ExerciseLibrarySelector({
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-white truncate">{ex.name}</p>
                     <p className="text-[9px] text-neutral-400 font-mono flex items-center gap-1 mt-0.5">
-                      <Video className="h-2.5 w-2.5 text-neutral-500" /> Web Demo Link
+                      <Video className="h-2.5 w-2.5 text-neutral-500" /> {isAr ? "فيديو توضيحي" : "Web Demo Link"}
                     </p>
                   </div>
 
@@ -156,16 +177,16 @@ export default function ExerciseLibrarySelector({
                           : "bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-850 hover:text-white"
                       }`}
                     >
-                      {isChosen ? "Selected" : "Select Info"}
+                      {isChosen ? (isAr ? "محدد" : "Selected") : (isAr ? "اختيار" : "Select Info")}
                     </button>
                     {onAddDirectly && (
                       <button
                         type="button"
                         onClick={() => onAddDirectly(ex.name, ex.videoUrl)}
                         className="py-1 bg-emerald-600 hover:bg-emerald-500 text-neutral-950 rounded text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
-                        title="Quick add to workout plan using current sets/reps"
+                        title={isAr ? "إضافة سريعة لبرنامج التمارين" : "Quick add to workout plan using current sets/reps"}
                       >
-                        <Plus className="h-2.5 w-2.5 stroke-[3px]" /> Quick Add
+                        <Plus className="h-2.5 w-2.5 stroke-[3px]" /> {isAr ? "إضافة" : "Quick Add"}
                       </button>
                     )}
                   </div>
@@ -176,7 +197,9 @@ export default function ExerciseLibrarySelector({
         </div>
       ) : (
         <div className="text-center py-8 bg-neutral-950 border border-neutral-850 rounded-lg">
-          <p className="text-xs text-neutral-500 italic">No exercises found for "{searchQuery}" under {selectedMuscle}.</p>
+          <p className="text-xs text-neutral-500 italic">
+            {isAr ? `لم يتم العثور على تمارين لـ "${searchQuery}".` : `No exercises found for "${searchQuery}" under ${selectedMuscle}.`}
+          </p>
           <button
             type="button"
             onClick={() => {
@@ -185,7 +208,7 @@ export default function ExerciseLibrarySelector({
             }}
             className="text-[10px] text-emerald-400 hover:underline mt-2 cursor-pointer font-bold"
           >
-            Reset Filters
+            {isAr ? "إعادة ضبط التصفية" : "Reset Filters"}
           </button>
         </div>
       )}
@@ -196,7 +219,7 @@ export default function ExerciseLibrarySelector({
           <div className="bg-neutral-950 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl max-w-2xl w-full animate-in zoom-in-95 duration-200">
             <div className="px-5 py-3 bg-neutral-900 border-b border-neutral-800 flex justify-between items-center">
               <h3 className="text-xs font-bold text-white font-mono flex items-center gap-1.5 uppercase">
-                <Video className="text-emerald-400 h-4 w-4" /> Demo: {previewVideoName}
+                <Video className="text-emerald-400 h-4 w-4" /> {isAr ? "عروض التمرين: " : "Demo: "}{previewVideoName}
               </h3>
               <button
                 type="button"
@@ -228,7 +251,7 @@ export default function ExerciseLibrarySelector({
                 }}
                 className="px-4 py-2 bg-neutral-950 hover:bg-neutral-800 text-neutral-200 rounded text-xs font-bold border border-neutral-800 transition-colors cursor-pointer"
               >
-                Select & Close
+                {isAr ? "اختيار وإغلاق" : "Select & Close"}
               </button>
               {onAddDirectly && (
                 <button
@@ -239,7 +262,7 @@ export default function ExerciseLibrarySelector({
                   }}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-neutral-950 rounded text-xs font-bold transition-colors cursor-pointer"
                 >
-                  Quick Add to Plan
+                  {isAr ? "إضافة سريعة للخطة" : "Quick Add to Plan"}
                 </button>
               )}
             </div>

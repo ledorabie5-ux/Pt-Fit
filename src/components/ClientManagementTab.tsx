@@ -43,7 +43,7 @@ function getVimeoEmbedUrl(url: string): string | null {
 }
 import { 
   User, Search, RefreshCw, Dumbbell, Apple, ClipboardList, 
-  LineChart, MessageSquare, Plus, Trash2, Video, Save, FolderOpen, Upload, X
+  LineChart, MessageSquare, Plus, Trash2, Video, Save, FolderOpen, Upload, X, Activity
 } from "lucide-react";
 
 interface ClientManagementTabProps {
@@ -235,14 +235,23 @@ export default function ClientManagementTab({
                       : "bg-neutral-950/60 border-neutral-800/80 hover:bg-neutral-900/40"
                   }`}
                 >
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-white flex items-center gap-1.5">
-                      {t.name}
-                      {expiring && (
-                        <span className="inline-block h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                      )}
-                    </p>
-                    <p className="text-[9px] text-neutral-400 font-mono">{t.phone || "No phone listed"}</p>
+                  <div className="flex items-center gap-2.5">
+                    {t.photoUrl ? (
+                      <img src={t.photoUrl} alt={t.name} referrerPolicy="no-referrer" className="h-8 w-8 rounded-full object-cover border border-emerald-500/50 shrink-0" />
+                    ) : (
+                      <div className="h-8 w-8 rounded-full bg-emerald-950 border border-emerald-800/50 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+                        {t.name[0]}
+                      </div>
+                    )}
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                        {t.name}
+                        {expiring && (
+                          <span className="inline-block h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                        )}
+                      </p>
+                      <p className="text-[9px] text-neutral-400 font-mono">{t.phone || "No phone listed"}</p>
+                    </div>
                   </div>
                   <div className="text-right">
                     <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full border font-mono ${
@@ -282,10 +291,14 @@ export default function ClientManagementTab({
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-xl space-y-6 animate-in fade-in duration-200">
             {/* Header info bar */}
             <div className="bg-neutral-950 px-6 py-4 border-b border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center space-x-3">
-                <div className="h-11 w-11 rounded-full bg-emerald-950 border border-emerald-800/50 text-emerald-400 flex items-center justify-center font-bold text-md">
-                  {selectedTrainee.name[0]}
-                </div>
+              <div className="flex items-center space-x-3 rtl:space-x-reverse">
+                {selectedTrainee.photoUrl ? (
+                  <img src={selectedTrainee.photoUrl} alt={selectedTrainee.name} referrerPolicy="no-referrer" className="h-11 w-11 rounded-full object-cover border border-emerald-500/50 shrink-0" />
+                ) : (
+                  <div className="h-11 w-11 rounded-full bg-emerald-950 border border-emerald-800/50 text-emerald-400 flex items-center justify-center font-bold text-md shrink-0">
+                    {selectedTrainee.name[0]}
+                  </div>
+                )}
                 <div>
                   <h3 className="text-sm font-bold text-white">{selectedTrainee.name}</h3>
                   <p className="text-xs text-neutral-400 mt-0.5">{selectedTrainee.email} • {selectedTrainee.phone}</p>
@@ -307,6 +320,45 @@ export default function ClientManagementTab({
                     Expires: {new Date(selectedTrainee.subscriptionExpiry).toLocaleDateString()} ({getDaysRemaining(selectedTrainee.subscriptionExpiry)} days left)
                   </span>
                 )}
+              </div>
+            </div>
+
+            {/* Trainee Fitness Profile & Metrics Overview Banner */}
+            <div className="px-6 py-3 bg-neutral-950/80 border-b border-neutral-850">
+              <div className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 font-bold">
+                <Activity className="h-3.5 w-3.5" />
+                <span>Trainee Fitness Profile & Biometrics</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 text-xs">
+                <div className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
+                  <span className="text-[10px] text-neutral-500 block font-mono">Fitness Goal</span>
+                  <span className="text-white font-bold text-xs truncate block mt-0.5">{selectedTrainee.fitnessGoal || "Not set"}</span>
+                </div>
+                <div className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
+                  <span className="text-[10px] text-neutral-500 block font-mono">Height / Weight</span>
+                  <span className="text-white font-bold text-xs block mt-0.5">
+                    {selectedTrainee.height ? `${selectedTrainee.height} cm` : "-"} / {selectedTrainee.weight ? `${selectedTrainee.weight} kg` : "-"}
+                    {selectedTrainee.height && selectedTrainee.weight && (
+                      <span className="text-[10px] text-emerald-400 font-mono block font-normal">
+                        BMI: {(selectedTrainee.weight / Math.pow(selectedTrainee.height / 100, 2)).toFixed(1)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
+                  <span className="text-[10px] text-neutral-500 block font-mono">Age / Gender</span>
+                  <span className="text-white font-bold text-xs block mt-0.5">
+                    {selectedTrainee.age ? `${selectedTrainee.age} yrs` : "-"} • {selectedTrainee.gender || "-"}
+                  </span>
+                </div>
+                <div className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
+                  <span className="text-[10px] text-neutral-500 block font-mono">Experience</span>
+                  <span className="text-white font-bold text-xs block mt-0.5">{selectedTrainee.trainingExperience || "Beginner"}</span>
+                </div>
+                <div className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
+                  <span className="text-[10px] text-neutral-500 block font-mono">Activity Level</span>
+                  <span className="text-white font-bold text-xs block mt-0.5 truncate">{selectedTrainee.activityLevel || "Moderately Active"}</span>
+                </div>
               </div>
             </div>
 

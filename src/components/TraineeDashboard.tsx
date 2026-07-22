@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { UserDoc, WorkoutDay, DietMeal, Exercise, Program, ProgressLog } from "../types";
-import { getProgram, logProgress, getTraineeProgress, subscribeToProgram, updateUserDoc } from "../services/dbService";
+import { getProgram, logProgress, getTraineeProgress, subscribeToProgram, updateUserDoc, getUser } from "../services/dbService";
 import ChatWindow from "./ChatWindow";
 import { 
   Dumbbell, Apple, LineChart, MessageSquare, Calendar, Clock, 
-  Video, CheckCircle2, AlertTriangle, Check, User, X
+  Video, CheckCircle2, AlertTriangle, Check, User, X, Users, MessageCircle, ExternalLink, Award, Camera, Upload
 } from "lucide-react";
+import AllCoachesView from "./AllCoachesView";
 import { Language, getTranslation } from "../utils/translations";
 
 interface TraineeDashboardProps {
@@ -54,22 +55,48 @@ function getVimeoEmbedUrl(url: string): string | null {
 }
 
 export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: TraineeDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"workouts" | "diet" | "history" | "chat" | "subscription" | "info">("workouts");
+  const [activeTab, setActiveTab] = useState<"workouts" | "diet" | "history" | "chat" | "subscription" | "info" | "coaches">("workouts");
 
   // Plan data
   const [program, setProgram] = useState<Program | null>(null);
   const [loadingProgram, setLoadingProgram] = useState(true);
   const [selectedDayId, setSelectedDayId] = useState("");
 
-  // Personal Information States
+  // Personal Information & Profile States
+  const [name, setName] = useState<string>(currentUser.name || "");
+  const [photoUrl, setPhotoUrl] = useState<string>(currentUser.photoUrl || "");
   const [weight, setWeight] = useState<string>(currentUser.weight?.toString() || "");
   const [height, setHeight] = useState<string>(currentUser.height?.toString() || "");
   const [fitnessGoal, setFitnessGoal] = useState<string>(currentUser.fitnessGoal || "Gain Muscle");
   const [age, setAge] = useState<string>(currentUser.age?.toString() || "");
   const [gender, setGender] = useState<string>(currentUser.gender || "Male");
+  const [trainingExperience, setTrainingExperience] = useState<string>(currentUser.trainingExperience || "Beginner");
+  const [activityLevel, setActivityLevel] = useState<string>(currentUser.activityLevel || "Moderately Active");
   const [savingInfo, setSavingInfo] = useState(false);
   const [infoSuccess, setInfoSuccess] = useState(false);
   const [infoError, setInfoError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (currentUser.name) setName(currentUser.name);
+    if (currentUser.photoUrl) setPhotoUrl(currentUser.photoUrl);
+  }, [currentUser.name, currentUser.photoUrl]);
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setInfoError(lang === "ar" ? "حجم الصورة كبير جداً (الحد الأقصى 5 ميجابايت)" : "File size is too large (max 5MB)");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (reader.result) {
+        setPhotoUrl(reader.result.toString());
+        setInfoError(null);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Progress tracking logs
   const [progressLogs, setProgressLogs] = useState<ProgressLog[]>([]);
@@ -82,6 +109,19 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
 
   // Video playback modal state
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
+
+  // Assigned Coach Profile state
+  const [assignedCoach, setAssignedCoach] = useState<UserDoc | null>(null);
+
+  useEffect(() => {
+    if (currentUser.coachId) {
+      getUser(currentUser.coachId).then((coach) => {
+        if (coach) setAssignedCoach(coach);
+      });
+    } else {
+      setAssignedCoach(null);
+    }
+  }, [currentUser.coachId]);
 
   async function loadProgressLogs() {
     setLoadingLogs(true);
@@ -116,11 +156,15 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
     try {
       const updatedDoc: UserDoc = {
         ...currentUser,
+        name: name.trim() || currentUser.name,
+        photoUrl: photoUrl || currentUser.photoUrl,
         weight: weight ? parseFloat(weight) : undefined,
         height: height ? parseFloat(height) : undefined,
         fitnessGoal: fitnessGoal,
         age: age ? parseInt(age) : undefined,
         gender: gender,
+        trainingExperience: trainingExperience,
+        activityLevel: activityLevel,
       };
 
       await updateUserDoc(updatedDoc);
@@ -177,12 +221,21 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
         {/* Welcome Card */}
         <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-3.5">
           <div className="flex items-center space-x-3 rtl:space-x-reverse">
-            <div className="h-10 w-10 bg-emerald-950 border border-emerald-800/50 rounded-full flex items-center justify-center text-emerald-400 font-bold">
-              {currentUser.name[0]}
-            </div>
-            <div>
+            {(photoUrl || currentUser.photoUrl) ? (
+              <img
+                src={photoUrl || currentUser.photoUrl}
+                alt={currentUser.name}
+                referrerPolicy="no-referrer"
+                className="h-11 w-11 rounded-full object-cover border border-emerald-500/50 shadow shrink-0"
+              />
+            ) : (
+              <div className="h-11 w-11 bg-emerald-950 border border-emerald-800/50 rounded-full flex items-center justify-center text-emerald-400 font-bold shrink-0">
+                {currentUser.name[0]}
+              </div>
+            )}
+            <div className="overflow-hidden">
               <h4 className="text-xs text-neutral-400 font-mono">{getTranslation(lang, "trainee")}</h4>
-              <h3 className="text-sm font-bold text-white mt-0.5">{currentUser.name}</h3>
+              <h3 className="text-sm font-bold text-white mt-0.5 truncate">{currentUser.name}</h3>
             </div>
           </div>
 
@@ -208,16 +261,65 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
           </div>
         </div>
 
+        {/* Assigned Coach Contact Card with Direct WhatsApp Button */}
+        {currentUser.coachName && (
+          <div className="bg-neutral-900 border border-emerald-900/60 rounded-xl p-4 shadow-lg space-y-3 relative overflow-hidden">
+            <div className="flex items-center gap-3">
+              <img
+                src={assignedCoach?.photoUrl || "https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=500&auto=format&fit=crop&q=80"}
+                alt="Coach Photo"
+                referrerPolicy="no-referrer"
+                className="h-11 w-11 rounded-full object-cover border border-emerald-500/50 shrink-0"
+              />
+              <div className="space-y-0.5 overflow-hidden">
+                <span className="text-[9px] font-mono text-emerald-400 uppercase tracking-wider block font-bold">
+                  {lang === "ar" ? "مدربك الشخصي" : "Your Assigned Coach"}
+                </span>
+                <h4 className="text-xs font-bold text-white truncate">{currentUser.coachName}</h4>
+                {assignedCoach?.specialization && (
+                  <p className="text-[10px] text-neutral-400 truncate">{assignedCoach.specialization}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Direct WhatsApp Action Button */}
+            {(() => {
+              const waNum = assignedCoach?.socialLinks?.whatsapp || assignedCoach?.phone;
+              if (!waNum) return (
+                <div className="text-[10px] text-neutral-500 text-center italic">
+                  {lang === "ar" ? "لم يضف المدرب رقم واتساب بعد" : "Coach WhatsApp not added yet"}
+                </div>
+              );
+              let digits = waNum.replace(/[^0-9]/g, "");
+              if (digits.startsWith("0")) digits = "20" + digits.substring(1);
+              if (!digits) return null;
+              return (
+                <a
+                  href={`https://wa.me/${digits}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2 bg-green-600 hover:bg-green-500 text-neutral-950 font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer active:scale-95"
+                >
+                  <MessageCircle className="h-4 w-4 fill-neutral-950" />
+                  <span>{lang === "ar" ? "تواصل مع المدرب عبر واتساب" : "Chat on WhatsApp"}</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              );
+            })()}
+          </div>
+        )}
+
         {/* Dashboard Menu List */}
         <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 shadow-lg flex flex-col gap-1">
           {(
             [
               { id: "workouts", label: getTranslation(lang, "traineeWorkoutsTab"), icon: Dumbbell },
               { id: "diet", label: getTranslation(lang, "traineeDietTab"), icon: Apple },
+              { id: "coaches", label: lang === "ar" ? "دليل المدربين (Coaches)" : "All Coaches", icon: Users },
               { id: "history", label: getTranslation(lang, "traineeHistoryTab"), icon: LineChart },
               { id: "chat", label: getTranslation(lang, "traineeChatTab"), icon: MessageSquare },
               { id: "subscription", label: getTranslation(lang, "traineeSubTab"), icon: Calendar },
-              { id: "info", label: lang === "ar" ? "معلوماتي الشخصية" : "My Information", icon: User }
+              { id: "info", label: lang === "ar" ? "الملف الشخصي" : "Trainee Profile", icon: User }
             ] as const
           ).map(tab => {
             const Icon = tab.icon;
@@ -522,25 +624,25 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
                   </div>
                 )}
 
-                {/* MY PERSONAL INFORMATION TAB */}
+                {/* MY PERSONAL INFORMATION / PROFILE TAB */}
                 {activeTab === "info" && (
                   <div className="max-w-2xl bg-neutral-950 border border-neutral-800 rounded-xl p-6 space-y-6">
                     <div>
                       <h3 className="text-md font-bold text-white flex items-center gap-2">
                         <User className="h-5 w-5 text-emerald-400" />
-                        {lang === "ar" ? "بياناتي الشخصية" : "My Personal Information"}
+                        {lang === "ar" ? "الملف الشخصي للمتدرب" : "Trainee Profile Settings"}
                       </h3>
                       <p className="text-xs text-neutral-500 mt-1">
                         {lang === "ar" 
-                          ? "حافظ على تحديث معلوماتك لمساعدة مدربك في تصميم خطط تدريب وغذاء دقيقة." 
-                          : "Keep your information updated to help your coach design precise training and diet plans."}
+                          ? "يمكنك تعديل صورتك الشخصية واسمك الكامل ليظهر للمدرب وفي كافة أرجاء المنصة." 
+                          : "Update your profile photo and full name displayed throughout the website."}
                       </p>
                     </div>
 
                     {infoSuccess && (
                       <div className="bg-emerald-950/40 border border-emerald-800/40 text-emerald-400 rounded-xl p-3 text-xs flex items-center gap-2 font-medium">
                         <Check className="h-4 w-4" />
-                        <span>{lang === "ar" ? "تم حفظ التغييرات بنجاح!" : "Changes saved successfully!"}</span>
+                        <span>{lang === "ar" ? "تم حفظ بيانات الملف الشخصي بنجاح!" : "Profile details saved successfully!"}</span>
                       </div>
                     )}
 
@@ -550,88 +652,201 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
                       </div>
                     )}
 
-                    <form onSubmit={handleSaveInfo} className="space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Weight */}
-                        <div className="space-y-1.5">
-                          <label className="text-xs text-neutral-400 font-medium">
-                            {lang === "ar" ? "الوزن (كجم)" : "Weight (kg)"}
-                          </label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            required
-                            placeholder="e.g. 75"
-                            value={weight}
-                            onChange={(e) => setWeight(e.target.value)}
-                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                          />
+                    <form onSubmit={handleSaveInfo} className="space-y-6">
+                      {/* SECTION 1: PROFILE PHOTO & FULL NAME */}
+                      <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-5">
+                        <h4 className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">
+                          {lang === "ar" ? "الصورة الشخصية والاسم" : "Profile Picture & Name"}
+                        </h4>
+
+                        {/* Profile Photo direct file upload */}
+                        <div className="flex flex-col sm:flex-row items-center gap-5 p-4 bg-neutral-950 border border-neutral-800/80 rounded-xl">
+                          <div className="relative shrink-0">
+                            {photoUrl ? (
+                              <img
+                                src={photoUrl}
+                                alt={name}
+                                referrerPolicy="no-referrer"
+                                className="h-24 w-24 rounded-full object-cover border-2 border-emerald-500 shadow-xl"
+                              />
+                            ) : (
+                              <div className="h-24 w-24 rounded-full bg-emerald-950 border-2 border-emerald-800 text-emerald-400 flex items-center justify-center font-bold text-2xl shadow-xl">
+                                {name ? name[0] : "T"}
+                              </div>
+                            )}
+                            <label
+                              htmlFor="trainee-photo-file-input"
+                              className="absolute bottom-0 right-0 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 p-2 rounded-full cursor-pointer shadow-lg transition-transform hover:scale-105"
+                              title={lang === "ar" ? "تغيير الصورة من الجهاز" : "Upload photo from device"}
+                            >
+                              <Camera className="h-4 w-4" />
+                            </label>
+                          </div>
+
+                          <div className="space-y-2 text-center sm:text-left rtl:sm:text-right">
+                            <label
+                              htmlFor="trainee-photo-file-input"
+                              className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-800/60 rounded-xl text-xs font-bold transition-all cursor-pointer shadow active:scale-95"
+                            >
+                              <Upload className="h-4 w-4" />
+                              <span>{lang === "ar" ? "تحميل صورة من الهاتف أو الكمبيوتر" : "Upload Photo from Device"}</span>
+                            </label>
+                            <input
+                              id="trainee-photo-file-input"
+                              type="file"
+                              accept="image/*"
+                              onChange={handlePhotoUpload}
+                              className="hidden"
+                            />
+                            <p className="text-[11px] text-neutral-400 leading-relaxed">
+                              {lang === "ar"
+                                ? "اختر صورة شخصية مباشرة من جهازك (PNG, JPG, WEBP). لا حاجة لكتابة أو لصق أي روابط."
+                                : "Choose an image file directly from your computer or mobile device."}
+                            </p>
+                          </div>
                         </div>
 
-                        {/* Height */}
+                        {/* Full Name input */}
                         <div className="space-y-1.5">
-                          <label className="text-xs text-neutral-400 font-medium">
-                            {lang === "ar" ? "الطول (سم)" : "Height (cm)"}
+                          <label className="text-xs text-neutral-300 font-bold flex items-center gap-1.5">
+                            <User className="h-3.5 w-3.5 text-emerald-400" />
+                            {lang === "ar" ? "الاسم الكامل" : "Full Name"}
                           </label>
                           <input
-                            type="number"
-                            step="0.1"
+                            type="text"
                             required
-                            placeholder="e.g. 178"
-                            value={height}
-                            onChange={(e) => setHeight(e.target.value)}
-                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="e.g. Ahmed Ali"
+                            className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors"
                           />
-                        </div>
-
-                        {/* Age */}
-                        <div className="space-y-1.5">
-                          <label className="text-xs text-neutral-400 font-medium">
-                            {lang === "ar" ? "العمر" : "Age"}
-                          </label>
-                          <input
-                            type="number"
-                            required
-                            placeholder="e.g. 25"
-                            value={age}
-                            onChange={(e) => setAge(e.target.value)}
-                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                          />
-                        </div>
-
-                        {/* Gender */}
-                        <div className="space-y-1.5">
-                          <label className="text-xs text-neutral-400 font-medium">
-                            {lang === "ar" ? "الجنس" : "Gender"}
-                          </label>
-                          <select
-                            value={gender}
-                            onChange={(e) => setGender(e.target.value)}
-                            className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
-                          >
-                            <option value="Male">{lang === "ar" ? "ذكر" : "Male"}</option>
-                            <option value="Female">{lang === "ar" ? "أنثى" : "Female"}</option>
-                            <option value="Other">{lang === "ar" ? "آخر" : "Other"}</option>
-                          </select>
                         </div>
                       </div>
 
-                      {/* Fitness Goal */}
-                      <div className="space-y-1.5">
-                        <label className="text-xs text-neutral-400 font-medium">
-                          {lang === "ar" ? "الهدف الرياضي" : "Fitness Goal"}
-                        </label>
-                        <select
-                          value={fitnessGoal}
-                          onChange={(e) => setFitnessGoal(e.target.value)}
-                          className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
-                        >
-                          <option value="Bulking">{lang === "ar" ? "تضخيم (Bulking)" : "Bulking"}</option>
-                          <option value="Cutting">{lang === "ar" ? "تنشيف (Cutting)" : "Cutting"}</option>
-                          <option value="Maintain Weight">{lang === "ar" ? "المحافظة على الوزن (Maintain Weight)" : "Maintain Weight"}</option>
-                          <option value="Gain Muscle">{lang === "ar" ? "كسب عضلات (Gain Muscle)" : "Gain Muscle"}</option>
-                          <option value="Lose Fat">{lang === "ar" ? "خسارة دهون (Lose Fat)" : "Lose Fat"}</option>
-                        </select>
+                      {/* SECTION 2: BIOMETRICS & FITNESS METRICS */}
+                      <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
+                        <h4 className="text-xs font-mono font-bold text-neutral-400 uppercase tracking-wider">
+                          {lang === "ar" ? "البيانات الجسمانية والهدف" : "Physical Stats & Fitness Goal"}
+                        </h4>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {/* Weight */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs text-neutral-400 font-medium">
+                              {lang === "ar" ? "الوزن (كجم)" : "Weight (kg)"}
+                            </label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              required
+                              placeholder="e.g. 75"
+                              value={weight}
+                              onChange={(e) => setWeight(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                            />
+                          </div>
+
+                          {/* Height */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs text-neutral-400 font-medium">
+                              {lang === "ar" ? "الطول (سم)" : "Height (cm)"}
+                            </label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              required
+                              placeholder="e.g. 178"
+                              value={height}
+                              onChange={(e) => setHeight(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                            />
+                          </div>
+
+                          {/* Age */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs text-neutral-400 font-medium">
+                              {lang === "ar" ? "العمر" : "Age"}
+                            </label>
+                            <input
+                              type="number"
+                              required
+                              placeholder="e.g. 25"
+                              value={age}
+                              onChange={(e) => setAge(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                            />
+                          </div>
+
+                          {/* Gender */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs text-neutral-400 font-medium">
+                              {lang === "ar" ? "الجنس" : "Gender"}
+                            </label>
+                            <select
+                              value={gender}
+                              onChange={(e) => setGender(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+                            >
+                              <option value="Male">{lang === "ar" ? "ذكر" : "Male"}</option>
+                              <option value="Female">{lang === "ar" ? "أنثى" : "Female"}</option>
+                              <option value="Other">{lang === "ar" ? "آخر" : "Other"}</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Fitness Goal */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-neutral-400 font-medium">
+                            {lang === "ar" ? "الهدف الرياضي" : "Fitness Goal"}
+                          </label>
+                          <select
+                            value={fitnessGoal}
+                            onChange={(e) => setFitnessGoal(e.target.value)}
+                            className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+                          >
+                            <option value="Bulking">{lang === "ar" ? "تضخيم عضلات (Bulking)" : "Bulking (Muscle Mass)"}</option>
+                            <option value="Cutting">{lang === "ar" ? "تنشيف وخسارة دهون (Cutting)" : "Cutting (Fat Loss)"}</option>
+                            <option value="Maintain Weight">{lang === "ar" ? "المحافظة على الوزن (Maintenance)" : "Maintenance"}</option>
+                            <option value="Gain Muscle">{lang === "ar" ? "زيادة الحجم العضلي (Gain Muscle)" : "Gain Muscle"}</option>
+                            <option value="Body Recomposition">{lang === "ar" ? "إعادة بناء الجسم (Body Recomposition)" : "Body Recomposition"}</option>
+                            <option value="Athletic Performance">{lang === "ar" ? "الأداء الرياضي والقوة (Athletic Performance)" : "Athletic Performance"}</option>
+                          </select>
+                        </div>
+
+                        {/* Training Experience & Activity Level */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-xs text-neutral-400 font-medium">
+                              {lang === "ar" ? "خبرة التدريب" : "Training Experience"}
+                            </label>
+                            <select
+                              value={trainingExperience}
+                              onChange={(e) => setTrainingExperience(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+                            >
+                              <option value="Beginner">{lang === "ar" ? "مبتدئ (أقل من سنة)" : "Beginner (<1 yr)"}</option>
+                              <option value="Intermediate">{lang === "ar" ? "متوسط (1 - 3 سنوات)" : "Intermediate (1-3 yrs)"}</option>
+                              <option value="Advanced">{lang === "ar" ? "متقدم (+3 سنوات)" : "Advanced (3+ yrs)"}</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-xs text-neutral-400 font-medium">
+                              {lang === "ar" ? "مستوى النشاط اليومي" : "Daily Activity Level"}
+                            </label>
+                            <select
+                              value={activityLevel}
+                              onChange={(e) => setActivityLevel(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+                            >
+                              <option value="Sedentary">{lang === "ar" ? "قليل الحركة (مكتبي)" : "Sedentary (Office work)"}</option>
+                              <option value="Lightly Active">{lang === "ar" ? "نشاط خفيف (1-2 أيام/أسبوع)" : "Lightly Active (1-2 days/wk)"}</option>
+                              <option value="Moderately Active">{lang === "ar" ? "نشاط متوسط (3-5 أيام/أسبوع)" : "Moderately Active (3-5 days/wk)"}</option>
+                              <option value="Very Active">{lang === "ar" ? "نشاط عالٍ (6-7 أيام/أسبوع)" : "Very Active (6-7 days/wk)"}</option>
+                              <option value="Extra Active">{lang === "ar" ? "رياضي محترف / عمل شاق" : "Extra Active (Athlete/Physical job)"}</option>
+                            </select>
+                          </div>
+                        </div>
                       </div>
 
                       <div className="pt-2">
@@ -642,10 +857,17 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
                         >
                           {savingInfo 
                             ? (lang === "ar" ? "جاري الحفظ..." : "Saving...") 
-                            : (lang === "ar" ? "حفظ التغييرات" : "Save Changes")}
+                            : (lang === "ar" ? "حفظ التغييرات" : "Save Profile Changes")}
                         </button>
                       </div>
                     </form>
+                  </div>
+                )}
+
+                {/* All Coaches Section Tab */}
+                {activeTab === "coaches" && (
+                  <div className="p-6">
+                    <AllCoachesView currentUser={currentUser} lang={lang} onUserUpdate={onUserUpdate} />
                   </div>
                 )}
               </div>

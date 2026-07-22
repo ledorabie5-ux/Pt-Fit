@@ -24,6 +24,22 @@ export interface UserDoc {
   fitnessGoal?: string;
   age?: number;
   gender?: string;
+  trainingExperience?: string; // "Beginner" | "Intermediate" | "Advanced"
+  activityLevel?: string; // "Sedentary" | "Lightly Active" | "Moderately Active" | "Very Active" | "Extra Active"
+  // Coach Profile Fields
+  photoUrl?: string;
+  bio?: string;
+  specialization?: string;
+  yearsOfExperience?: number;
+  socialLinks?: {
+    instagram?: string;
+    youtube?: string;
+    tiktok?: string;
+    facebook?: string;
+    twitter?: string;
+    website?: string;
+    whatsapp?: string;
+  };
   // Coaching notes & measurements
   coachNotes?: string;
   measurementsChest?: string;

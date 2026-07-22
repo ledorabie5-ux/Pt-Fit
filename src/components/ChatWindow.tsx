@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Message, UserDoc } from "../types";
 import { subscribeToChatMessages, sendMessage, getUser, getChatId } from "../services/dbService";
-import { Send, User, MessageSquare, ChevronLeft } from "lucide-react";
+import { Send, User, MessageSquare, ChevronLeft, MessageCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface ChatWindowProps {
@@ -84,14 +84,35 @@ export default function ChatWindow({ currentUserId, recipientId, onClose }: Chat
             </div>
           </div>
         </div>
-        {onClose && (
-          <button 
-            onClick={onClose}
-            className="flex items-center gap-1 text-neutral-400 hover:text-white text-[11px] font-bold bg-neutral-800/60 hover:bg-neutral-800 px-2.5 py-1.5 rounded-lg border border-neutral-700/30 transition-all cursor-pointer"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" /> Close
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {(() => {
+            const rawWa = recipient?.socialLinks?.whatsapp || recipient?.phone;
+            if (!rawWa) return null;
+            let digits = rawWa.replace(/[^0-9]/g, "");
+            if (digits.startsWith("0")) digits = "20" + digits.substring(1);
+            if (!digits) return null;
+            return (
+              <a
+                href={`https://wa.me/${digits}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-950 hover:bg-green-600 hover:text-neutral-950 text-green-400 border border-green-800/60 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-md"
+                title="Chat directly on WhatsApp"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">WhatsApp</span>
+              </a>
+            );
+          })()}
+          {onClose && (
+            <button 
+              onClick={onClose}
+              className="flex items-center gap-1 text-neutral-400 hover:text-white text-[11px] font-bold bg-neutral-800/60 hover:bg-neutral-800 px-2.5 py-1.5 rounded-lg border border-neutral-700/30 transition-all cursor-pointer"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Close
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Messages Area */}

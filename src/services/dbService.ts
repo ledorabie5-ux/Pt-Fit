@@ -188,6 +188,143 @@ export async function getAllUsers(): Promise<UserDoc[]> {
   }
 }
 
+export async function getAllCoaches(): Promise<UserDoc[]> {
+  try {
+    const q = query(collection(db, "users"), where("role", "==", "coach"));
+    const querySnapshot = await getDocs(q);
+    const coaches: UserDoc[] = [];
+    querySnapshot.forEach((doc) => {
+      coaches.push(doc.data() as UserDoc);
+    });
+
+    if (coaches.length > 0) {
+      return coaches;
+    }
+  } catch (error) {
+    if (!isPermissionDenied(error)) {
+      console.warn("Error fetching coaches from firestore, using fallback coaches:", error);
+    }
+  }
+
+  // Fallback demo coaches list with complete profiles
+  return [
+    {
+      uid: "demo_coach_1",
+      name: "Captain Sherif El-Sayed",
+      email: "sherif@ptfit.com",
+      phone: "01000000002",
+      role: "coach",
+      status: "approved",
+      specialization: "Bodybuilding & Muscle Hypertrophy",
+      yearsOfExperience: 8,
+      bio: "Certified IFBB Pro Fitness Coach with over 8 years of experience transforming top competitive athletes and fitness enthusiasts. Specializes in customized progressive overload routines and precision macronutrient nutrition plans.",
+      photoUrl: "https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=500&auto=format&fit=crop&q=80",
+      socialLinks: {
+        instagram: "https://instagram.com/ptfit_sherif",
+        youtube: "https://youtube.com/@ptfit_sherif",
+        whatsapp: "201044186025"
+      },
+      createdAt: new Date().toISOString()
+    },
+    {
+      uid: "demo_coach_2",
+      name: "Captain Ahmed Hassan",
+      email: "ahmed@ptfit.com",
+      phone: "01000000004",
+      role: "coach",
+      status: "approved",
+      specialization: "Fat Loss & Body Recomposition",
+      yearsOfExperience: 6,
+      bio: "Dedicated transformational coach helping clients shed body fat while building lean functional strength. Science-backed meal planning, metabolic conditioning, and daily accountability.",
+      photoUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
+      socialLinks: {
+        instagram: "https://instagram.com/ahmed_fit",
+        facebook: "https://facebook.com/ahmed.ptfit",
+        whatsapp: "201044186025"
+      },
+      createdAt: new Date().toISOString()
+    },
+    {
+      uid: "demo_coach_3",
+      name: "Captain Omar Farouk",
+      email: "omar@ptfit.com",
+      phone: "01000000005",
+      role: "coach",
+      status: "approved",
+      specialization: "Powerlifting & Strength Development",
+      yearsOfExperience: 10,
+      bio: "National Powerlifting Champion and elite strength coach. Expert in squat, bench press, deadlift technique optimization, central nervous system recovery, and periodized training cycles.",
+      photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80",
+      socialLinks: {
+        youtube: "https://youtube.com/@omar_strength",
+        twitter: "https://x.com/omar_power",
+        whatsapp: "201044186025"
+      },
+      createdAt: new Date().toISOString()
+    },
+    {
+      uid: "demo_coach_4",
+      name: "Coach Nour Khedr",
+      email: "nour@ptfit.com",
+      phone: "01000000006",
+      role: "coach",
+      status: "approved",
+      specialization: "Female Fitness & Metabolic Health",
+      yearsOfExperience: 5,
+      bio: "Holistic female fitness instructor specializing in body transformations, mobility, posture correction, and sustainable lifestyle nutritional planning.",
+      photoUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80",
+      socialLinks: {
+        instagram: "https://instagram.com/nour_fitness",
+        tiktok: "https://tiktok.com/@nour_coach",
+        whatsapp: "201044186025"
+      },
+      createdAt: new Date().toISOString()
+    }
+  ];
+}
+
+export async function assignCoachToTrainee(traineeId: string, coachId: string, coachName: string): Promise<void> {
+  try {
+    const traineeRef = doc(db, "users", traineeId);
+    await updateDoc(traineeRef, {
+      coachId,
+      coachName
+    });
+  } catch (error) {
+    console.warn("Failed to update coach for trainee doc in Firestore directly:", error);
+  }
+
+  // Update program doc coachId if program exists
+  try {
+    const programRef = doc(db, "programs", traineeId);
+    const progSnap = await getDoc(programRef);
+    if (progSnap.exists()) {
+      await updateDoc(programRef, {
+        coachId,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  } catch (err) {
+    console.warn("Could not update program coach ID:", err);
+  }
+
+  // Notify trainee and new coach
+  try {
+    await createNotification(
+      traineeId,
+      "Coach Updated",
+      `You have successfully assigned Captain ${coachName} as your head coach.`
+    );
+    await createNotification(
+      coachId,
+      "New Trainee Assigned",
+      `A trainee has selected you as their coach. Check your roster in Client Management!`
+    );
+  } catch (err) {
+    console.warn("Could not dispatch notifications for coach assignment:", err);
+  }
+}
+
 export async function updateUserStatus(uid: string, status: "approved" | "rejected"): Promise<void> {
   try {
     const docRef = doc(db, "users", uid);
@@ -1006,11 +1143,20 @@ export async function getTraineesForCoach(coachId: string): Promise<UserDoc[]> {
 }
 
 export async function getLandingStats(): Promise<LandingStats> {
-  // Realistic professional fallbacks when user is not authorized to list everything
-  let coaches = 5;
-  let trainees = 24;
-  let activeSubscriptions = 18;
-  let workoutVideos = 12;
+  // Baseline offsets so stats start with realistic numbers and scale as real data is added:
+  // - 368 base offset + current trainees count (starts at 376+ with 8 current trainees)
+  // - 347 base offset + current active subs count (starts at 354 with 7 current active subs)
+  // - 117 base offset + current workout videos count (starts at 129 with 12 current videos)
+  // - 19 base offset + current coaches count (starts at 24+ with 5 current coaches)
+  const BASE_COACHES_OFFSET = 19;
+  const BASE_TRAINEES_OFFSET = 368;
+  const BASE_ACTIVE_SUBS_OFFSET = 347;
+  const BASE_VIDEOS_OFFSET = 117;
+
+  let coaches = BASE_COACHES_OFFSET + 5;
+  let trainees = BASE_TRAINEES_OFFSET + 8;
+  let activeSubscriptions = BASE_ACTIVE_SUBS_OFFSET + 7;
+  let workoutVideos = BASE_VIDEOS_OFFSET + 12;
 
   try {
     const usersSnap = await getDocs(collection(db, "users"));
@@ -1028,9 +1174,9 @@ export async function getLandingStats(): Promise<LandingStats> {
         }
       }
     });
-    coaches = tempCoaches;
-    trainees = tempTrainees;
-    activeSubscriptions = tempActive;
+    coaches = BASE_COACHES_OFFSET + tempCoaches;
+    trainees = BASE_TRAINEES_OFFSET + tempTrainees;
+    activeSubscriptions = BASE_ACTIVE_SUBS_OFFSET + tempActive;
   } catch (err) {
     console.warn("Could not query all users for landing stats (unauthorized, normal for visitors):", err);
   }
@@ -1038,7 +1184,7 @@ export async function getLandingStats(): Promise<LandingStats> {
   try {
     const videosSnap = await getDocs(collection(db, "exercise_videos"));
     if (videosSnap.size > 0) {
-      workoutVideos = videosSnap.size;
+      workoutVideos = BASE_VIDEOS_OFFSET + videosSnap.size;
     }
   } catch (err) {
     console.warn("Could not query exercise videos for landing stats:", err);

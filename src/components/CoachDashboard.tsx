@@ -4,7 +4,7 @@ import {
   searchTraineeByPhone, updateSubscription, getProgram, 
   updateProgram, getTraineeProgress, getTraineesForCoach, createNotification,
   freezeSubscription, resumeSubscription, changeSubscriptionDuration,
-  renewTraineeSubscription, createUserDoc, updateUserDoc,
+  renewTraineeSubscription, createUserDoc, updateUserDoc, getUser,
   getWorkoutTemplates, saveWorkoutTemplate, deleteWorkoutTemplate,
   getNutritionTemplates, saveNutritionTemplate, deleteNutritionTemplate
 } from "../services/dbService";
@@ -12,21 +12,44 @@ import AddMemberTab from "./AddMemberTab";
 import ClientManagementTab from "./ClientManagementTab";
 import SubscriptionManagementTab from "./SubscriptionManagementTab";
 import TemplatesTab from "./TemplatesTab";
+import CoachProfileSettingsTab from "./CoachProfileSettingsTab";
 import { 
   Dumbbell, Apple, LineChart, MessageSquare, User, Plus, Trash2, Save,
-  UserPlus, RefreshCw, Layers, CalendarDays, ClipboardList
+  UserPlus, RefreshCw, Layers, CalendarDays, ClipboardList, Settings
 } from "lucide-react";
 import { Language, getTranslation } from "../utils/translations";
 
 interface CoachDashboardProps {
   currentUserId: string;
   currentUserName: string;
+  currentUser?: UserDoc;
   lang?: Language;
+  onUserUpdate?: (updatedUser: UserDoc) => void;
 }
 
-export default function CoachDashboard({ currentUserId, currentUserName, lang = "en" }: CoachDashboardProps) {
-  // Navigation: 4 Main Sections requested by the user
-  const [activeSection, setActiveSection] = useState<"add-member" | "client-management" | "subscription-management" | "templates">("client-management");
+export default function CoachDashboard({ currentUserId, currentUserName, currentUser, lang = "en", onUserUpdate }: CoachDashboardProps) {
+  // Navigation: 5 Main Sections for Coach
+  const [activeSection, setActiveSection] = useState<"add-member" | "client-management" | "subscription-management" | "templates" | "profile-settings">("client-management");
+
+  // Coach User Profile State
+  const [coachProfile, setCoachProfile] = useState<UserDoc | null>(currentUser || null);
+
+  useEffect(() => {
+    if (currentUser) {
+      setCoachProfile(currentUser);
+    } else if (currentUserId) {
+      getUser(currentUserId).then(u => {
+        if (u) setCoachProfile(u);
+      });
+    }
+  }, [currentUser, currentUserId]);
+
+  const handleCoachProfileUpdate = (updated: UserDoc) => {
+    setCoachProfile(updated);
+    if (onUserUpdate) {
+      onUserUpdate(updated);
+    }
+  };
 
   // Roster state
   const [myTrainees, setMyTrainees] = useState<UserDoc[]>([]);
@@ -472,8 +495,14 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
       {/* Top Navigation Mode Toggle Bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-neutral-900 border border-neutral-800 p-4 rounded-xl gap-4">
         <div>
-          <h2 className="text-sm font-bold text-white font-sans uppercase tracking-wider">Coach Administration Control Panel</h2>
-          <p className="text-[11px] text-neutral-400 mt-0.5">Manage trainee accounts, assign workout program schedules, assign custom diet routines, and manage templates.</p>
+          <h2 className="text-sm font-bold text-white font-sans uppercase tracking-wider">
+            {lang === "ar" ? "لوحة تحكم وتوجيه المدرب" : "Coach Administration Control Panel"}
+          </h2>
+          <p className="text-[11px] text-neutral-400 mt-0.5">
+            {lang === "ar"
+              ? "إدارة حسابات المتدربين، تعيين جداول البرامج التدريبية، تخصيص أنظمة التغذية، وإدارة القوالب."
+              : "Manage trainee accounts, assign workout program schedules, assign custom diet routines, and manage templates."}
+          </p>
         </div>
         <div className="flex flex-wrap bg-neutral-950 p-1 rounded-lg border border-neutral-800 w-full md:w-auto gap-1">
           <button
@@ -487,7 +516,7 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
                 : "text-neutral-400 hover:text-white"
             }`}
           >
-            <UserPlus className="h-3.5 w-3.5" /> Add Member
+            <UserPlus className="h-3.5 w-3.5" /> {lang === "ar" ? "إضافة مشترك" : "Add Member"}
           </button>
           <button
             onClick={() => setActiveSection("client-management")}
@@ -497,7 +526,7 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
                 : "text-neutral-400 hover:text-white"
             }`}
           >
-            <ClipboardList className="h-3.5 w-3.5" /> Client Management
+            <ClipboardList className="h-3.5 w-3.5" /> {lang === "ar" ? "إدارة المشتركين" : "Client Management"}
           </button>
           <button
             onClick={() => {
@@ -510,7 +539,7 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
                 : "text-neutral-400 hover:text-white"
             }`}
           >
-            <CalendarDays className="h-3.5 w-3.5" /> Subscription Management
+            <CalendarDays className="h-3.5 w-3.5" /> {lang === "ar" ? "إدارة الاشتراكات" : "Subscription Management"}
           </button>
           <button
             onClick={() => {
@@ -523,13 +552,27 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
                 : "text-neutral-400 hover:text-white"
             }`}
           >
-            <Layers className="h-3.5 w-3.5" /> Templates
+            <Layers className="h-3.5 w-3.5" /> {lang === "ar" ? "القوالب الجاهزة" : "Templates"}
+          </button>
+          <button
+            onClick={() => {
+              setActiveSection("profile-settings");
+              setSelectedTrainee(null);
+            }}
+            className={`flex-1 md:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${
+              activeSection === "profile-settings"
+                ? "bg-emerald-600 text-neutral-950 shadow-md"
+                : "text-neutral-400 hover:text-white"
+            }`}
+          >
+            <Settings className="h-3.5 w-3.5" /> {lang === "ar" ? "إعدادات الملف الشخصي" : "Profile Settings"}
           </button>
         </div>
       </div>
 
       {activeSection === "add-member" && (
         <AddMemberTab 
+          lang={lang}
           onSearchPhone={async (phone) => {
             const list = await searchTraineeByPhone(phone);
             setSearchResults(list);
@@ -543,6 +586,7 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
 
       {activeSection === "client-management" && (
         <ClientManagementTab
+          lang={lang}
           myTrainees={myTrainees}
           selectedTrainee={selectedTrainee}
           setSelectedTrainee={setSelectedTrainee}
@@ -584,13 +628,14 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
             await updateUserDoc(updatedTrainee);
             setSelectedTrainee(updatedTrainee);
             setMyTrainees(prev => prev.map(t => t.uid === selectedTrainee.uid ? updatedTrainee : t));
-            alert("Notes and measurements saved successfully!");
+            alert(lang === "ar" ? "تم حفظ الملاحظات والقياسات بنجاح!" : "Notes and measurements saved successfully!");
           }}
         />
       )}
 
       {activeSection === "subscription-management" && (
         <SubscriptionManagementTab
+          lang={lang}
           myTrainees={myTrainees}
           selectedTrainee={selectedTrainee}
           setSelectedTrainee={setSelectedTrainee}
@@ -609,6 +654,7 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
 
       {activeSection === "templates" && (
         <TemplatesTab
+          lang={lang}
           currentUserId={currentUserId}
           workoutTemplates={workoutTemplates}
           nutritionTemplates={nutritionTemplates}
@@ -621,11 +667,11 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
               createdAt: new Date().toISOString()
             };
             await saveWorkoutTemplate(template);
-            alert(`Workout template "${name}" saved!`);
+            alert(lang === "ar" ? `تم حفظ قالب التمرين "${name}"!` : `Workout template "${name}" saved!`);
             loadTemplates();
           }}
           onDeleteWorkoutTemplate={async (id) => {
-            if (!confirm("Delete this workout template?")) return;
+            if (!confirm(lang === "ar" ? "هل أنت متأكد من حذف هذا القالب؟" : "Delete this workout template?")) return;
             await deleteWorkoutTemplate(id);
             loadTemplates();
           }}
@@ -637,24 +683,33 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
               createdAt: new Date().toISOString()
             };
             await saveNutritionTemplate(template);
-            alert(`Nutrition template "${name}" saved!`);
+            alert(lang === "ar" ? `تم حفظ قالب التغذية "${name}"!` : `Nutrition template "${name}" saved!`);
             loadTemplates();
           }}
           onDeleteNutritionTemplate={async (id) => {
-            if (!confirm("Delete this nutrition template?")) return;
+            if (!confirm(lang === "ar" ? "هل أنت متأكد من حذف هذا القالب؟" : "Delete this nutrition template?")) return;
             await deleteNutritionTemplate(id);
             loadTemplates();
           }}
         />
       )}
 
+      {activeSection === "profile-settings" && coachProfile && (
+        <CoachProfileSettingsTab
+          currentUser={coachProfile}
+          lang={lang}
+          onUserUpdate={handleCoachProfileUpdate}
+        />
+      )}
+
       {/* ADD WORKOUT DAY MODAL (PERSISTS IN WORKSPACE) */}
       {isAddDayModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl max-w-md w-full animate-in zoom-in-95 duration-200 text-xs text-left">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl max-w-md w-full animate-in zoom-in-95 duration-200 text-xs text-left rtl:text-right">
             <div className="px-6 py-4 bg-neutral-950 border-b border-neutral-800 flex justify-between items-center">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Dumbbell className="text-emerald-400 h-4.5 w-4.5" /> Add Workout Day
+                <Dumbbell className="text-emerald-400 h-4.5 w-4.5" />
+                {lang === "ar" ? "إضافة يوم تدريبي" : "Add Workout Day"}
               </h3>
               <button 
                 onClick={() => setIsAddDayModalOpen(false)}
@@ -666,20 +721,31 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
 
             <div className="p-6 space-y-4">
               <div className="space-y-1">
-                <label className="text-neutral-400 font-mono">Select Weekday</label>
+                <label className="text-neutral-400 font-mono">
+                  {lang === "ar" ? "اختر اليوم من الأسبوع" : "Select Weekday"}
+                </label>
                 <div className="grid grid-cols-4 gap-1.5">
-                  {["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Custom"].map(day => (
+                  {[
+                    { key: "Saturday", label: lang === "ar" ? "السبت" : "Saturday" },
+                    { key: "Sunday", label: lang === "ar" ? "الأحد" : "Sunday" },
+                    { key: "Monday", label: lang === "ar" ? "الإثنين" : "Monday" },
+                    { key: "Tuesday", label: lang === "ar" ? "الثلاثاء" : "Tuesday" },
+                    { key: "Wednesday", label: lang === "ar" ? "الأربعاء" : "Wednesday" },
+                    { key: "Thursday", label: lang === "ar" ? "الخميس" : "Thursday" },
+                    { key: "Friday", label: lang === "ar" ? "الجمعة" : "Friday" },
+                    { key: "Custom", label: lang === "ar" ? "مخصص" : "Custom" }
+                  ].map(day => (
                     <button
                       type="button"
-                      key={day}
-                      onClick={() => setSelectedWeekDay(day)}
+                      key={day.key}
+                      onClick={() => setSelectedWeekDay(day.key)}
                       className={`py-1 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                        selectedWeekDay === day
+                        selectedWeekDay === day.key
                           ? "bg-emerald-950 text-emerald-400 border-emerald-500"
                           : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-white"
                       }`}
                     >
-                      {day}
+                      {day.label}
                     </button>
                   ))}
                 </div>
@@ -687,10 +753,12 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
 
               {selectedWeekDay === "Custom" && (
                 <div className="space-y-1">
-                  <label className="text-neutral-400 font-mono">Custom Day Title</label>
+                  <label className="text-neutral-400 font-mono">
+                    {lang === "ar" ? "عنوان اليوم المخصص" : "Custom Day Title"}
+                  </label>
                   <input
                     type="text"
-                    placeholder="e.g. Legs & Cardio, Upper Body A"
+                    placeholder={lang === "ar" ? "مثال: أرجل وكارديو، الجزء العلوي أ" : "e.g. Legs & Cardio, Upper Body A"}
                     value={customDayName}
                     onChange={(e) => setCustomDayName(e.target.value)}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500"
@@ -699,10 +767,12 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
               )}
 
               <div className="space-y-1">
-                <label className="text-neutral-400 font-mono">Day Training Focus Target</label>
+                <label className="text-neutral-400 font-mono">
+                  {lang === "ar" ? "التركيز والهدف من اليوم (عضلات اليوم)" : "Day Training Focus Target"}
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. Chest & Triceps, Leg Day, Cardio"
+                  placeholder={lang === "ar" ? "مثال: صدر وترايسبس، تمارين الأرجل، كارديو" : "e.g. Chest & Triceps, Leg Day, Cardio"}
                   value={dayFocus}
                   onChange={(e) => setDayFocus(e.target.value)}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500"
@@ -716,14 +786,14 @@ export default function CoachDashboard({ currentUserId, currentUserName, lang = 
                 onClick={() => setIsAddDayModalOpen(false)}
                 className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white rounded-lg text-xs font-bold border border-neutral-800 transition-colors cursor-pointer"
               >
-                Cancel
+                {lang === "ar" ? "إلغاء" : "Cancel"}
               </button>
               <button
                 type="button"
                 onClick={handleConfirmAddDay}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-neutral-950 rounded-lg text-xs font-bold transition-colors cursor-pointer"
               >
-                Add Workout Day
+                {lang === "ar" ? "إضافة اليوم" : "Add Workout Day"}
               </button>
             </div>
           </div>

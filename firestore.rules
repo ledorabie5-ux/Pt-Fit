@@ -144,6 +144,7 @@ service cloud.firestore {
       allow get: if isDevBypass() || (isSignedIn() && isValidId(userId) && (
         isOwner(userId) || 
         isAdmin() || 
+        resource.data.role == "coach" ||
         (exists(/databases/$(database)/documents/users/$(userId)) && 
          get(/databases/$(database)/documents/users/$(userId)).data.coachId == request.auth.uid)
       ));
@@ -151,7 +152,8 @@ service cloud.firestore {
       allow list: if isDevBypass() || (isSignedIn() && (
         isAdmin() || 
         resource.data.uid == request.auth.uid || 
-        resource.data.coachId == request.auth.uid
+        resource.data.coachId == request.auth.uid ||
+        resource.data.role == "coach"
       ));
 
       // Create: User is registering themselves. Must start as 'pending' with initial properties, except for admins.
@@ -164,15 +166,16 @@ service cloud.firestore {
       // Update actions
       allow update: if isDevBypass() || (isSignedIn() && isValidId(userId) && (
         isAdmin() || 
-        // Action: User modifies their own optional info (weight, height, goals) and must NOT change role, status, or subscription keys
+        // Action: User modifies their own optional info (weight, height, goals, coach choice, profile info)
         (isOwner(userId) && isValidUser(incoming()) && 
          incoming().role == existing().role && 
          incoming().status == existing().status &&
          incoming().subscriptionStatus == existing().subscriptionStatus &&
          incoming().subscriptionExpiry == existing().subscriptionExpiry &&
-         incoming().coachId == existing().coachId &&
          incoming().diff(existing()).affectedKeys().hasOnly([
-           'name', 'phone', 'weight', 'height', 'fitnessGoal', 'age', 'gender', 'password'
+           'name', 'phone', 'weight', 'height', 'fitnessGoal', 'age', 'gender', 'password',
+           'trainingExperience', 'activityLevel', 'coachId', 'coachName',
+           'photoUrl', 'bio', 'specialization', 'yearsOfExperience', 'socialLinks'
          ])) ||
         // Action: Coach updates status or subscription details of their trainee, as well as notes and measurements
         (isCoachOfTrainee(request.auth.uid, userId) && isValidUser(incoming()) &&

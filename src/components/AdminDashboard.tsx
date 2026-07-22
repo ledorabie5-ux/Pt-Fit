@@ -861,8 +861,24 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
                     {filteredUsers.map(u => (
                       <tr key={u.uid} className="hover:bg-neutral-800/10 transition-all">
                         <td className="px-6 py-4">
-                          <p className="font-bold text-white text-sm">{u.name}</p>
-                          <p className="text-xs text-neutral-500 mt-0.5">{u.email}</p>
+                          <div className="flex items-center gap-3">
+                            {u.photoUrl ? (
+                              <img
+                                src={u.photoUrl}
+                                alt={u.name}
+                                referrerPolicy="no-referrer"
+                                className="h-9 w-9 rounded-full object-cover border border-emerald-500/50 shrink-0"
+                              />
+                            ) : (
+                              <div className="h-9 w-9 rounded-full bg-emerald-950 border border-emerald-800/50 text-emerald-400 font-bold flex items-center justify-center text-xs shrink-0">
+                                {u.name ? u.name[0] : "U"}
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-bold text-white text-sm">{u.name}</p>
+                              <p className="text-xs text-neutral-500">{u.email}</p>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-6 py-4 font-mono text-xs">
                           {u.phone || "N/A"}

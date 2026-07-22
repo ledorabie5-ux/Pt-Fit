@@ -203,7 +203,13 @@ export default function App() {
           <AdminDashboard currentUserId={currentUser.uid} lang={lang} />
         )}
         {currentUser.role === "coach" && (
-          <CoachDashboard currentUserId={currentUser.uid} currentUserName={currentUser.name} lang={lang} />
+          <CoachDashboard 
+            currentUserId={currentUser.uid} 
+            currentUserName={currentUser.name} 
+            currentUser={currentUser}
+            lang={lang} 
+            onUserUpdate={(updated) => setCurrentUser(updated)}
+          />
         )}
         {currentUser.role === "trainee" && (
           <TraineeDashboard currentUser={currentUser} lang={lang} onUserUpdate={(updated) => setCurrentUser(updated)} />

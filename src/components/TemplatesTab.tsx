@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { WorkoutTemplate, NutritionTemplate, WorkoutDay, Exercise, DietMeal } from "../types";
+import { WorkoutTemplate, NutritionTemplate, WorkoutDay, Exercise, DietMeal, Language } from "../types";
 import { Layers, Trash2, Plus, Dumbbell, Apple, Video, FolderOpen, Upload } from "lucide-react";
 import ExerciseLibrarySelector from "./ExerciseLibrarySelector";
 
 interface TemplatesTabProps {
+  lang?: Language;
   currentUserId: string;
   workoutTemplates: WorkoutTemplate[];
   nutritionTemplates: NutritionTemplate[];
@@ -15,6 +16,7 @@ interface TemplatesTabProps {
 }
 
 export default function TemplatesTab({
+  lang,
   workoutTemplates,
   nutritionTemplates,
   loadingTemplates,
@@ -23,6 +25,8 @@ export default function TemplatesTab({
   onCreateNutritionTemplate,
   onDeleteNutritionTemplate
 }: TemplatesTabProps) {
+  const isAr = lang === "ar";
+
   // Form State for Workout Template Creation
   const [workoutTplName, setWorkoutTplName] = useState("");
   const [workoutTplDays, setWorkoutTplDays] = useState<WorkoutDay[]>([]);
@@ -37,12 +41,12 @@ export default function TemplatesTab({
   // Form State for Nutrition Template Creation
   const [nutritionTplName, setNutritionTplName] = useState("");
   const [nutritionTplMeals, setNutritionTplMeals] = useState<DietMeal[]>([
-    { id: "m1", mealName: "Breakfast", foodItems: "" },
-    { id: "m2", mealName: "Snack", foodItems: "" },
-    { id: "m3", mealName: "Lunch", foodItems: "" },
-    { id: "m4", mealName: "Pre-workout", foodItems: "" },
-    { id: "m5", mealName: "Post-workout", foodItems: "" },
-    { id: "m6", mealName: "Dinner", foodItems: "" }
+    { id: "m1", mealName: isAr ? "الفطور" : "Breakfast", foodItems: "" },
+    { id: "m2", mealName: isAr ? "وجبة خفيفة (سناك)" : "Snack", foodItems: "" },
+    { id: "m3", mealName: isAr ? "الغداء" : "Lunch", foodItems: "" },
+    { id: "m4", mealName: isAr ? "قبل التمرين" : "Pre-workout", foodItems: "" },
+    { id: "m5", mealName: isAr ? "بعد التمرين" : "Post-workout", foodItems: "" },
+    { id: "m6", mealName: isAr ? "العشاء" : "Dinner", foodItems: "" }
   ]);
 
   // Workout Day helpers
@@ -110,11 +114,11 @@ export default function TemplatesTab({
   const handleSaveWorkout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!workoutTplName.trim()) {
-      alert("Please provide a name for the workout template.");
+      alert(isAr ? "يرجى كتابة اسم لنموذج التمرين." : "Please provide a name for the workout template.");
       return;
     }
     if (workoutTplDays.length === 0) {
-      alert("Please add at least one day and exercise.");
+      alert(isAr ? "يرجى إضافة يوم واحد وتمرين واحد على الأقل." : "Please add at least one day and exercise.");
       return;
     }
     await onCreateWorkoutTemplate(workoutTplName.trim(), workoutTplDays);
@@ -126,18 +130,18 @@ export default function TemplatesTab({
   const handleSaveNutrition = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nutritionTplName.trim()) {
-      alert("Please provide a name for the nutrition template.");
+      alert(isAr ? "يرجى كتابة اسم لنموذج التغذية." : "Please provide a name for the nutrition template.");
       return;
     }
     await onCreateNutritionTemplate(nutritionTplName.trim(), nutritionTplMeals);
     setNutritionTplName("");
     setNutritionTplMeals([
-      { id: "m1", mealName: "Breakfast", foodItems: "" },
-      { id: "m2", mealName: "Snack", foodItems: "" },
-      { id: "m3", mealName: "Lunch", foodItems: "" },
-      { id: "m4", mealName: "Pre-workout", foodItems: "" },
-      { id: "m5", mealName: "Post-workout", foodItems: "" },
-      { id: "m6", mealName: "Dinner", foodItems: "" }
+      { id: "m1", mealName: isAr ? "الفطور" : "Breakfast", foodItems: "" },
+      { id: "m2", mealName: isAr ? "وجبة خفيفة (سناك)" : "Snack", foodItems: "" },
+      { id: "m3", mealName: isAr ? "الغداء" : "Lunch", foodItems: "" },
+      { id: "m4", mealName: isAr ? "قبل التمرين" : "Pre-workout", foodItems: "" },
+      { id: "m5", mealName: isAr ? "بعد التمرين" : "Post-workout", foodItems: "" },
+      { id: "m6", mealName: isAr ? "العشاء" : "Dinner", foodItems: "" }
     ]);
   };
 
@@ -145,30 +149,41 @@ export default function TemplatesTab({
     <div className="space-y-6 animate-in fade-in duration-200">
       <div>
         <h3 className="text-md font-bold text-white flex items-center gap-2">
-          <Layers className="text-emerald-400 h-5 w-5" /> Reusable Training Templates
+          <Layers className="text-emerald-400 h-5 w-5" />
+          {isAr ? "نماذج البرامج القابلة لإعادة الاستخدام" : "Reusable Training Templates"}
         </h3>
-        <p className="text-xs text-neutral-400 mt-1">Create master workout and nutrition plans only once, then assign them with one click inside Client profiles.</p>
+        <p className="text-xs text-neutral-400 mt-1">
+          {isAr
+            ? "أنشئ الخطط الشاملة للتمارين والتغذية مرة واحدة، ثم قم بتعيينها بنقرة واحدة داخل ملفات المتدربين."
+            : "Create master workout and nutrition plans only once, then assign them with one click inside Client profiles."}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Workout Templates Section */}
         <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-6">
           <div>
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono border-b border-neutral-800 pb-2">Workout Plan Templates</h4>
-            <p className="text-[11px] text-neutral-400 mt-1">Design multi-day routines with customized exercise targets.</p>
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono border-b border-neutral-800 pb-2">
+              {isAr ? "نماذج برامج التمارين" : "Workout Plan Templates"}
+            </h4>
+            <p className="text-[11px] text-neutral-400 mt-1">
+              {isAr ? "تصميم برامج متعددة الأيام مع استهداف تمارين مخصصة." : "Design multi-day routines with customized exercise targets."}
+            </p>
           </div>
 
           <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
             {loadingTemplates ? (
-              <p className="text-xs text-neutral-500 italic">Loading templates...</p>
+              <p className="text-xs text-neutral-500 italic">{isAr ? "جاري تحميل النماذج..." : "Loading templates..."}</p>
             ) : workoutTemplates.length === 0 ? (
-              <p className="text-xs text-neutral-500 italic">No workout templates built yet.</p>
+              <p className="text-xs text-neutral-500 italic">{isAr ? "لم يتم إنشاء نماذج تمارين بعد." : "No workout templates built yet."}</p>
             ) : (
               workoutTemplates.map(t => (
                 <div key={t.id} className="p-3 bg-neutral-950 border border-neutral-800 rounded-lg flex justify-between items-center">
                   <div>
                     <p className="text-xs font-bold text-white">{t.name}</p>
-                    <p className="text-[9px] text-neutral-500 font-mono">{t.workoutDays.length} Days Structured</p>
+                    <p className="text-[9px] text-neutral-500 font-mono">
+                      {t.workoutDays.length} {isAr ? "أيام مجهزة" : "Days Structured"}
+                    </p>
                   </div>
                   <button onClick={() => onDeleteWorkoutTemplate(t.id)} className="text-neutral-500 hover:text-red-400 p-1 cursor-pointer">
                     <Trash2 className="h-4 w-4" />
@@ -179,11 +194,13 @@ export default function TemplatesTab({
           </div>
 
           <form onSubmit={handleSaveWorkout} className="bg-neutral-950 p-4 border border-neutral-800 rounded-lg space-y-4">
-            <h5 className="text-[11px] font-bold text-emerald-400 uppercase tracking-widest font-mono">Create Workout Template</h5>
+            <h5 className="text-[11px] font-bold text-emerald-400 uppercase tracking-widest font-mono">
+              {isAr ? "إنشاء نموذج تمارين جديد" : "Create Workout Template"}
+            </h5>
             
             <input
               type="text"
-              placeholder="Template Name (e.g. Push Pull Legs Split)"
+              placeholder={isAr ? "اسم النموذج (مثال: تقسيم دفع سحب أرجل)" : "Template Name (e.g. Push Pull Legs Split)"}
               value={workoutTplName}
               onChange={(e) => setWorkoutTplName(e.target.value)}
               className="w-full bg-neutral-900 border border-neutral-850 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
@@ -194,7 +211,7 @@ export default function TemplatesTab({
                 <input
                   type="text"
                   id="day-tpl-in"
-                  placeholder="e.g. Day 1: Pull Day"
+                  placeholder={isAr ? "مثال: اليوم 1: سحب" : "e.g. Day 1: Pull Day"}
                   className="flex-1 bg-neutral-900 border border-neutral-850 rounded px-2.5 py-1 text-xs text-white focus:outline-none"
                 />
                 <button
@@ -208,7 +225,7 @@ export default function TemplatesTab({
                   }}
                   className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-bold text-xs px-3.5 rounded transition-all cursor-pointer"
                 >
-                  + Add Day
+                  + {isAr ? "إضافة يوم" : "Add Day"}
                 </button>
               </div>
 
@@ -232,10 +249,12 @@ export default function TemplatesTab({
                   <div className="md:col-span-8 space-y-3">
                     {(() => {
                       const activeDayObj = workoutTplDays.find(d => d.id === activeTplDayId);
-                      if (!activeDayObj) return <p className="text-[10px] text-neutral-500 italic">Select a day to structure.</p>;
+                      if (!activeDayObj) return <p className="text-[10px] text-neutral-500 italic">{isAr ? "اختر يوماً للتنظيم." : "Select a day to structure."}</p>;
                       return (
                         <div className="space-y-2">
-                          <p className="text-[10px] font-bold text-neutral-300">Exercises for {activeDayObj.dayName}:</p>
+                          <p className="text-[10px] font-bold text-neutral-300">
+                            {isAr ? `تمارين ${activeDayObj.dayName}:` : `Exercises for ${activeDayObj.dayName}:`}
+                          </p>
                           
                           <div className="space-y-1 max-h-[100px] overflow-y-auto">
                             {activeDayObj.exercises.map((ex, exIdx) => (
@@ -248,7 +267,7 @@ export default function TemplatesTab({
 
                           <div className="space-y-2 border-t border-neutral-800 pt-3 text-[10px]">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-neutral-900 pb-1.5">
-                              <span className="font-bold text-neutral-300 font-mono">ADD EXERCISE</span>
+                              <span className="font-bold text-neutral-300 font-mono">{isAr ? "إضافة تمرين" : "ADD EXERCISE"}</span>
                               <div className="flex bg-neutral-950 p-0.5 rounded border border-neutral-850 gap-0.5 self-start scale-90 origin-top-left sm:origin-top-right">
                                 <button
                                   type="button"
@@ -259,7 +278,7 @@ export default function TemplatesTab({
                                       : "text-neutral-400 hover:text-white"
                                   }`}
                                 >
-                                  <FolderOpen className="h-2.5 w-2.5" /> Library
+                                  <FolderOpen className="h-2.5 w-2.5" /> {isAr ? "المكتبة" : "Library"}
                                 </button>
                                 <button
                                   type="button"
@@ -270,7 +289,7 @@ export default function TemplatesTab({
                                       : "text-neutral-400 hover:text-white"
                                   }`}
                                 >
-                                  <Upload className="h-2.5 w-2.5" /> Custom
+                                  <Upload className="h-2.5 w-2.5" /> {isAr ? "مخصص" : "Custom"}
                                 </button>
                               </div>
                             </div>
@@ -278,11 +297,11 @@ export default function TemplatesTab({
                             {/* Sets / Reps targets */}
                             <div className="grid grid-cols-2 gap-1 bg-neutral-900/30 p-1.5 rounded border border-neutral-850">
                               <div className="flex items-center gap-1.5 bg-neutral-950 border border-neutral-850 rounded px-1.5 py-0.5">
-                                <span className="text-[9px] text-neutral-400 font-mono">Sets:</span>
+                                <span className="text-[9px] text-neutral-400 font-mono">{isAr ? "الجولات:" : "Sets:"}</span>
                                 <input
                                   type="number"
                                   min="1"
-                                  placeholder="Sets"
+                                  placeholder={isAr ? "الجولات" : "Sets"}
                                   value={newExSets}
                                   onChange={(e) => setNewExSets(parseInt(e.target.value) || 3)}
                                   className="w-full bg-transparent border-none text-[10px] text-white focus:outline-none text-center"
@@ -290,7 +309,7 @@ export default function TemplatesTab({
                               </div>
                               <input
                                 type="text"
-                                placeholder="Reps (10-12)"
+                                placeholder={isAr ? "التكرارات (10-12)" : "Reps (10-12)"}
                                 value={newExReps}
                                 onChange={(e) => setNewExReps(e.target.value)}
                                 className="bg-neutral-950 border border-neutral-850 rounded px-2 py-0.5 text-white text-[10px]"
@@ -300,6 +319,7 @@ export default function TemplatesTab({
                             {exerciseSourceMode === "library" ? (
                               <div className="space-y-2">
                                 <ExerciseLibrarySelector
+                                  lang={lang}
                                   selectedName={newExName}
                                   selectedVideoUrl={newExVideo}
                                   onSelect={(name, videoUrl) => {
@@ -323,14 +343,14 @@ export default function TemplatesTab({
                                       }
                                       return day;
                                     }));
-                                    alert(`Added "${name}" to template!`);
+                                    alert(isAr ? `تمت إضافة "${name}" إلى النموذج!` : `Added "${name}" to template!`);
                                   }}
                                 />
 
                                 {newExName && (
                                   <div className="bg-neutral-950 p-2 rounded border border-emerald-900/40 flex justify-between items-center text-[10px] animate-in slide-in-from-bottom-1 duration-200">
                                     <div className="truncate pr-2">
-                                      <span className="text-neutral-400 text-[8px] block">Selected:</span>
+                                      <span className="text-neutral-400 text-[8px] block">{isAr ? "المحدد:" : "Selected:"}</span>
                                       <span className="text-white font-bold">{newExName}</span>
                                     </div>
                                     <button
@@ -338,7 +358,7 @@ export default function TemplatesTab({
                                       onClick={() => handleAddExercise(activeDayObj.id)}
                                       className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-bold px-2.5 py-0.5 rounded cursor-pointer text-[9px] shrink-0"
                                     >
-                                      + Add
+                                      + {isAr ? "إضافة" : "Add"}
                                     </button>
                                   </div>
                                 )}
@@ -348,7 +368,7 @@ export default function TemplatesTab({
                                 <div className="space-y-1">
                                   <input
                                     type="text"
-                                    placeholder="Custom Exercise Name"
+                                    placeholder={isAr ? "اسم التمرين المخصص" : "Custom Exercise Name"}
                                     value={newExName}
                                     onChange={(e) => setNewExName(e.target.value)}
                                     className="w-full bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-white text-[10px]"
@@ -357,7 +377,7 @@ export default function TemplatesTab({
                                 <div className="space-y-1">
                                   <input
                                     type="text"
-                                    placeholder="Video Demo Link (optional)"
+                                    placeholder={isAr ? "رابط فيديو توضيحي (اختياري)" : "Video Demo Link (optional)"}
                                     value={newExVideo}
                                     onChange={(e) => setNewExVideo(e.target.value)}
                                     className="w-full bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-white text-[10px]"
@@ -365,7 +385,9 @@ export default function TemplatesTab({
                                 </div>
                                 
                                 <div className="border-t border-neutral-900 pt-1.5">
-                                  <span className="text-[8px] text-neutral-500 font-mono block mb-1">Or Upload Video File:</span>
+                                  <span className="text-[8px] text-neutral-500 font-mono block mb-1">
+                                    {isAr ? "أو ارفع ملف فيديو:" : "Or Upload Video File:"}
+                                  </span>
                                   <input
                                     type="file"
                                     accept="video/*"
@@ -375,7 +397,7 @@ export default function TemplatesTab({
                                         const objectUrl = URL.createObjectURL(file);
                                         setNewExVideo(objectUrl);
                                         setNewExName(newExName || file.name.split(".")[0]);
-                                        alert(`Private video "${file.name}" loaded successfully in template preview!`);
+                                        alert(isAr ? `تم تحميل الفيديو "${file.name}" بنجاح!` : `Private video "${file.name}" loaded successfully in template preview!`);
                                       }
                                     }}
                                     className="w-full bg-neutral-900 border border-neutral-800 rounded text-[9px] text-neutral-400 file:bg-neutral-850 file:border-none file:text-[8px] file:text-white file:px-1.5 file:py-0.5 file:rounded file:cursor-pointer hover:file:bg-neutral-700"
@@ -387,7 +409,7 @@ export default function TemplatesTab({
                                   onClick={() => handleAddExercise(activeDayObj.id)}
                                   className="w-full bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-bold text-[9px] py-1 rounded cursor-pointer mt-1"
                                 >
-                                  + Add Custom Exercise
+                                  + {isAr ? "إضافة تمرين مخصص" : "Add Custom Exercise"}
                                 </button>
                               </div>
                             )}
@@ -404,7 +426,7 @@ export default function TemplatesTab({
               type="submit"
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-bold text-xs py-2 rounded-lg transition-colors cursor-pointer"
             >
-              Save Workout Template
+              {isAr ? "حفظ نموذج التمرين" : "Save Workout Template"}
             </button>
           </form>
         </div>
@@ -412,21 +434,27 @@ export default function TemplatesTab({
         {/* Nutrition Templates Section */}
         <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-6">
           <div>
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono border-b border-neutral-800 pb-2">Nutrition Plan Templates</h4>
-            <p className="text-[11px] text-neutral-400 mt-1">Pre-configure nutrition programs with Breakfast, Snack, Lunch, Pre-workout, Post-workout, Dinner meals.</p>
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono border-b border-neutral-800 pb-2">
+              {isAr ? "نماذج البرامج الغذائية" : "Nutrition Plan Templates"}
+            </h4>
+            <p className="text-[11px] text-neutral-400 mt-1">
+              {isAr ? "إعداد مسبق للأنظمة الغذائية مع تفاصيل الوجبات اليومية." : "Pre-configure nutrition programs with Breakfast, Snack, Lunch, Pre-workout, Post-workout, Dinner meals."}
+            </p>
           </div>
 
           <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
             {loadingTemplates ? (
-              <p className="text-xs text-neutral-500 italic">Loading templates...</p>
+              <p className="text-xs text-neutral-500 italic">{isAr ? "جاري تحميل النماذج..." : "Loading templates..."}</p>
             ) : nutritionTemplates.length === 0 ? (
-              <p className="text-xs text-neutral-500 italic">No nutrition templates built yet.</p>
+              <p className="text-xs text-neutral-500 italic">{isAr ? "لم يتم إنشاء نماذج تغذية بعد." : "No nutrition templates built yet."}</p>
             ) : (
               nutritionTemplates.map(t => (
                 <div key={t.id} className="p-3 bg-neutral-950 border border-neutral-800 rounded-lg flex justify-between items-center">
                   <div>
                     <p className="text-xs font-bold text-white">{t.name}</p>
-                    <p className="text-[9px] text-neutral-500 font-mono">{t.dietMeals.length} Scheduled Meals</p>
+                    <p className="text-[9px] text-neutral-500 font-mono">
+                      {t.dietMeals.length} {isAr ? "وجبات مجدولة" : "Scheduled Meals"}
+                    </p>
                   </div>
                   <button onClick={() => onDeleteNutritionTemplate(t.id)} className="text-neutral-500 hover:text-red-400 p-1 cursor-pointer">
                     <Trash2 className="h-4 w-4" />
@@ -437,11 +465,13 @@ export default function TemplatesTab({
           </div>
 
           <form onSubmit={handleSaveNutrition} className="bg-neutral-950 p-4 border border-neutral-800 rounded-lg space-y-4">
-            <h5 className="text-[11px] font-bold text-emerald-400 uppercase tracking-widest font-mono">Create Nutrition Template</h5>
+            <h5 className="text-[11px] font-bold text-emerald-400 uppercase tracking-widest font-mono">
+              {isAr ? "إنشاء نموذج تغذية جديد" : "Create Nutrition Template"}
+            </h5>
             
             <input
               type="text"
-              placeholder="Template Name (e.g. 2800kcal Keto Split)"
+              placeholder={isAr ? "اسم النموذج (مثال: نظام كيتو 2800 سعرة)" : "Template Name (e.g. 2800kcal Keto Split)"}
               value={nutritionTplName}
               onChange={(e) => setNutritionTplName(e.target.value)}
               className="w-full bg-neutral-900 border border-neutral-850 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
@@ -452,7 +482,7 @@ export default function TemplatesTab({
                 <div key={meal.id} className="space-y-1">
                   <label className="block text-[10px] font-bold text-emerald-400 font-mono uppercase tracking-widest">{meal.mealName}</label>
                   <textarea
-                    placeholder={`Meals and portions for ${meal.mealName.toLowerCase()}...`}
+                    placeholder={isAr ? `الوجبات والأصناف لـ ${meal.mealName}...` : `Meals and portions for ${meal.mealName.toLowerCase()}...`}
                     value={meal.foodItems}
                     onChange={(e) => {
                       const updated = [...nutritionTplMeals];
@@ -470,7 +500,7 @@ export default function TemplatesTab({
               type="submit"
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-bold text-xs py-2 rounded-lg transition-colors cursor-pointer"
             >
-              Save Nutrition Template
+              {isAr ? "حفظ نموذج التغذية" : "Save Nutrition Template"}
             </button>
           </form>
         </div>

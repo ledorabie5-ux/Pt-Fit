@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { UserDoc } from "../types";
+import { UserDoc, Language } from "../types";
 import { CalendarDays, Search, User, ShieldAlert, Check } from "lucide-react";
 
 interface SubscriptionManagementTabProps {
+  lang?: Language;
   myTrainees: UserDoc[];
   selectedTrainee: UserDoc | null;
   setSelectedTrainee: (t: UserDoc | null) => void;
@@ -13,6 +14,7 @@ interface SubscriptionManagementTabProps {
 }
 
 export default function SubscriptionManagementTab({
+  lang,
   myTrainees,
   selectedTrainee,
   setSelectedTrainee,
@@ -21,6 +23,7 @@ export default function SubscriptionManagementTab({
   onResumeSubscription,
   getDaysRemaining
 }: SubscriptionManagementTabProps) {
+  const isAr = lang === "ar";
   const [searchQuery, setSearchQuery] = useState("");
   const [isExtendCustom, setIsExtendCustom] = useState(false);
   const [extendCustomDays, setExtendCustomDays] = useState(30);
@@ -37,16 +40,19 @@ export default function SubscriptionManagementTab({
       <div className="lg:col-span-4 bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-4">
         <div>
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <CalendarDays className="text-emerald-400 h-4 w-4" /> Subscription Roster
+            <CalendarDays className="text-emerald-400 h-4 w-4" />
+            {isAr ? "قائمة اشتراكات الأعضاء" : "Subscription Roster"}
           </h3>
-          <p className="text-[10px] text-neutral-400 mt-0.5">Select a client below to manage subscription status.</p>
+          <p className="text-[10px] text-neutral-400 mt-0.5">
+            {isAr ? "اختر عميلاً أدناه لإدارة حالة وقوانين اشتراكه." : "Select a client below to manage subscription status."}
+          </p>
         </div>
 
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-neutral-500" />
           <input
             type="text"
-            placeholder="Search by phone or name..."
+            placeholder={isAr ? "البحث بالاسم أو رقم الهاتف..." : "Search by phone or name..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-neutral-950 border border-neutral-800 rounded-lg pl-8.5 pr-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500"
@@ -55,7 +61,9 @@ export default function SubscriptionManagementTab({
 
         <div className="space-y-2 max-h-[450px] overflow-y-auto pr-1">
           {filtered.length === 0 ? (
-            <p className="text-xs text-neutral-500 italic px-1">No matching clients found.</p>
+            <p className="text-xs text-neutral-500 italic px-1">
+              {isAr ? "لم يتم العثور على مشتركين مطابقين." : "No matching clients found."}
+            </p>
           ) : (
             filtered.map(t => {
               const isSelected = selectedTrainee?.uid === t.uid;
@@ -64,7 +72,7 @@ export default function SubscriptionManagementTab({
                 <button
                   key={t.uid}
                   onClick={() => setSelectedTrainee(t)}
-                  className={`w-full text-left px-4 py-2.5 rounded-lg border flex items-center justify-between transition-all cursor-pointer ${
+                  className={`w-full text-left rtl:text-right px-4 py-2.5 rounded-lg border flex items-center justify-between transition-all cursor-pointer ${
                     isSelected
                       ? "bg-emerald-950/20 border-emerald-500 shadow-md"
                       : "bg-neutral-950/60 border-neutral-800 hover:bg-neutral-900/40"
@@ -72,9 +80,9 @@ export default function SubscriptionManagementTab({
                 >
                   <div>
                     <p className="text-xs font-bold text-white">{t.name}</p>
-                    <p className="text-[9px] text-neutral-400 font-mono mt-0.5">{t.phone || "No phone listed"}</p>
+                    <p className="text-[9px] text-neutral-400 font-mono mt-0.5">{t.phone || (isAr ? "لا يوجد رقم" : "No phone listed")}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right rtl:text-left">
                     <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full border font-mono ${
                       t.subscriptionStatus === "active"
                         ? "bg-emerald-950 text-emerald-400 border-emerald-800/45"
@@ -82,7 +90,11 @@ export default function SubscriptionManagementTab({
                         ? "bg-amber-950 text-amber-400 border-amber-800/45"
                         : "bg-red-950 text-red-400 border-red-800/45"
                     }`}>
-                      {t.subscriptionStatus === "active" ? `${daysLeft} Days` : t.subscriptionStatus?.toUpperCase() || "EXPIRED"}
+                      {t.subscriptionStatus === "active"
+                        ? (isAr ? `${daysLeft} يوم` : `${daysLeft} Days`)
+                        : t.subscriptionStatus === "frozen"
+                        ? (isAr ? "مُجمد" : "FROZEN")
+                        : (isAr ? "منتهي" : "EXPIRED")}
                     </span>
                   </div>
                 </button>
@@ -100,38 +112,64 @@ export default function SubscriptionManagementTab({
               <CalendarDays className="h-7 w-7" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Subscription Management Control</h3>
+              <h3 className="text-sm font-bold text-white">
+                {isAr ? "لوحة التحكم في اشتراكات الأعضاء" : "Subscription Management Control"}
+              </h3>
               <p className="text-xs text-neutral-400 mt-2 max-w-sm mx-auto leading-relaxed">
-                Select a client on the left to check remaining days, extend subscriptions, freeze memberships, or resume existing frozen ones.
+                {isAr
+                  ? "اختر عميلاً من القائمة للتحقق من الأيام المتبقية، تمديد الاشتراك، أو تجميد/استئناف العضوية."
+                  : "Select a client on the left to check remaining days, extend subscriptions, freeze memberships, or resume existing frozen ones."}
               </p>
             </div>
           </div>
         ) : (
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 shadow-xl space-y-6">
             <div>
-              <h3 className="text-sm font-bold text-white">Manage Membership: {selectedTrainee.name}</h3>
-              <p className="text-xs text-neutral-400 mt-0.5">Control billing cycles and subscription schedules.</p>
+              <h3 className="text-sm font-bold text-white">
+                {isAr ? `إدارة اشتراك: ${selectedTrainee.name}` : `Manage Membership: ${selectedTrainee.name}`}
+              </h3>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                {isAr ? "التحكم في دورات التجديد وجداول الاشتراك." : "Control billing cycles and subscription schedules."}
+              </p>
             </div>
 
             {/* Current details */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-neutral-950 p-4 rounded-xl border border-neutral-800 text-xs">
               <div>
-                <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider mb-0.5">Subscription Status</p>
-                <p className="text-xs font-bold text-white capitalize">{selectedTrainee.subscriptionStatus || "None / Expired"}</p>
+                <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider mb-0.5">
+                  {isAr ? "حالة الاشتراك" : "Subscription Status"}
+                </p>
+                <p className="text-xs font-bold text-white capitalize">
+                  {selectedTrainee.subscriptionStatus === "active"
+                    ? (isAr ? "نشط" : "Active")
+                    : selectedTrainee.subscriptionStatus === "frozen"
+                    ? (isAr ? "مُجمد" : "Frozen")
+                    : (isAr ? "غير نشط / منتهي" : "None / Expired")}
+                </p>
               </div>
               <div>
-                <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider mb-0.5">Remaining Days</p>
-                <p className="text-xs font-bold text-emerald-400 font-mono">{getDaysRemaining(selectedTrainee.subscriptionExpiry)} Days</p>
+                <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider mb-0.5">
+                  {isAr ? "الأيام المتبقية" : "Remaining Days"}
+                </p>
+                <p className="text-xs font-bold text-emerald-400 font-mono">
+                  {getDaysRemaining(selectedTrainee.subscriptionExpiry)} {isAr ? "أيام" : "Days"}
+                </p>
               </div>
               <div>
-                <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider mb-0.5">Expiry Date</p>
-                <p className="text-xs font-bold text-white font-mono">{selectedTrainee.subscriptionExpiry ? new Date(selectedTrainee.subscriptionExpiry).toLocaleDateString() : "N/A"}</p>
+                <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider mb-0.5">
+                  {isAr ? "تاريخ الانتهاء" : "Expiry Date"}
+                </p>
+                <p className="text-xs font-bold text-white font-mono">
+                  {selectedTrainee.subscriptionExpiry ? new Date(selectedTrainee.subscriptionExpiry).toLocaleDateString() : (isAr ? "غير محدد" : "N/A")}
+                </p>
               </div>
             </div>
 
             {/* Extend section */}
             <div className="p-5 bg-neutral-950 rounded-xl border border-neutral-800 space-y-4">
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Extend Membership</h4>
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                {isAr ? "تمديد العضوية" : "Extend Membership"}
+              </h4>
               
               <div className="flex gap-4">
                 <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
@@ -141,7 +179,7 @@ export default function SubscriptionManagementTab({
                     onChange={() => setIsExtendCustom(false)} 
                     className="accent-emerald-500"
                   />
-                  Predefined Packages
+                  {isAr ? "باقات جاهزة" : "Predefined Packages"}
                 </label>
                 <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
                   <input 
@@ -150,16 +188,16 @@ export default function SubscriptionManagementTab({
                     onChange={() => setIsExtendCustom(true)} 
                     className="accent-emerald-500"
                   />
-                  Custom Duration Extension
+                  {isAr ? "تمديد بمدة مخصصة" : "Custom Duration Extension"}
                 </label>
               </div>
 
               {!isExtendCustom ? (
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { label: "1 Month", days: 30 },
-                    { label: "3 Months", days: 90 },
-                    { label: "1 Year", days: 365 }
+                    { label: isAr ? "1 شهر" : "1 Month", days: 30 },
+                    { label: isAr ? "3 أشهر" : "3 Months", days: 90 },
+                    { label: isAr ? "1 سنة" : "1 Year", days: 365 }
                   ].map(plan => (
                     <button
                       key={plan.label}
@@ -179,12 +217,12 @@ export default function SubscriptionManagementTab({
                     onChange={(e) => setExtendCustomDays(Number(e.target.value))}
                     className="w-24 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white"
                   />
-                  <span className="text-xs text-neutral-400">Days</span>
+                  <span className="text-xs text-neutral-400">{isAr ? "أيام" : "Days"}</span>
                   <button
-                    onClick={() => onExtendSubscription(selectedTrainee, extendCustomDays, `${extendCustomDays} Days`)}
+                    onClick={() => onExtendSubscription(selectedTrainee, extendCustomDays, `${extendCustomDays} ${isAr ? "أيام" : "Days"}`)}
                     className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-sans font-bold text-xs px-4 py-2 rounded-lg transition-colors cursor-pointer"
                   >
-                    Apply Extension
+                    {isAr ? "تطبيق التمديد" : "Apply Extension"}
                   </button>
                 </div>
               )}
@@ -192,24 +230,28 @@ export default function SubscriptionManagementTab({
 
             {/* Freeze/Resume controllers */}
             <div className="p-5 bg-neutral-950 rounded-xl border border-neutral-800 space-y-4">
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Status Controllers</h4>
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                {isAr ? "تحكم بحالة العضوية" : "Status Controllers"}
+              </h4>
               <div className="flex flex-wrap gap-2">
                 {selectedTrainee.subscriptionStatus === "active" ? (
                   <button
                     onClick={() => onFreezeSubscription(selectedTrainee)}
                     className="bg-amber-950/40 hover:bg-amber-600 text-amber-400 hover:text-neutral-950 border border-amber-800/30 font-bold text-xs px-5 py-2.5 rounded-lg transition-all cursor-pointer"
                   >
-                    ❄️ Freeze Membership
+                    ❄️ {isAr ? "تجميد الاشتراك الآن" : "Freeze Membership"}
                   </button>
                 ) : selectedTrainee.subscriptionStatus === "frozen" ? (
                   <button
                     onClick={() => onResumeSubscription(selectedTrainee)}
                     className="bg-emerald-950/40 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-800/30 font-bold text-xs px-5 py-2.5 rounded-lg transition-all cursor-pointer"
                   >
-                    ▶️ Resume Frozen Membership
+                    ▶️ {isAr ? "استئناف الاشتراك وتحديث التاريخ" : "Resume Frozen Membership"}
                   </button>
                 ) : (
-                  <p className="text-xs text-neutral-500 italic">Membership must be active to freeze, or frozen to resume.</p>
+                  <p className="text-xs text-neutral-500 italic">
+                    {isAr ? "يجب أن تكون العضوية نشطة للتجميد، أو مجمدة للاستئناف." : "Membership must be active to freeze, or frozen to resume."}
+                  </p>
                 )}
               </div>
             </div>
