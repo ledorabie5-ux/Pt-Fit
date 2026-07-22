@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { UserDoc, WorkoutDay, DietMeal, Exercise, Program, ProgressLog, WorkoutTemplate, NutritionTemplate } from "../types";
+import { UserDoc, WorkoutDay, DietMeal, Exercise, Program, ProgressLog, WorkoutTemplate, NutritionTemplate, AINutritionSummary } from "../types";
 import { 
   searchTraineeByPhone, updateSubscription, getProgram, 
   updateProgram, getTraineeProgress, getTraineesForCoach, createNotification,
@@ -477,14 +477,47 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
         coachId: currentUserId,
         workoutDays: workoutDays,
         dietMeals: dietMeals,
+        nutritionSummary: program?.nutritionSummary,
         updatedAt: new Date().toISOString()
       };
       await updateProgram(updatedProgram, currentUserName);
       setProgram(updatedProgram);
-      alert("Trainee program schedule saved successfully!");
+      alert(lang === "ar" ? "تم حفظ البرنامج بنجاح!" : "Trainee program schedule saved successfully!");
     } catch (err) {
       console.error(err);
-      alert("Error saving program.");
+      alert(lang === "ar" ? "خطأ أثناء حفظ البرنامج" : "Error saving program.");
+    } finally {
+      setLoadingProgram(false);
+    }
+  };
+
+  const handleSaveNutritionPlan = async (newMeals: DietMeal[], summary: AINutritionSummary) => {
+    if (!selectedTrainee) return;
+    setLoadingProgram(true);
+    try {
+      setDietMeals(newMeals);
+      const updatedProgram: Program = {
+        id: selectedTrainee.uid,
+        traineeId: selectedTrainee.uid,
+        coachId: currentUserId,
+        workoutDays: workoutDays,
+        dietMeals: newMeals,
+        nutritionSummary: summary,
+        updatedAt: new Date().toISOString()
+      };
+      await updateProgram(updatedProgram, currentUserName);
+      setProgram(updatedProgram);
+      await createNotification(
+        selectedTrainee.uid,
+        lang === "ar" ? "نظام غذائي جديد" : "New AI Nutrition Plan",
+        lang === "ar" 
+          ? `قام المدرب ${currentUserName} بتعيين خطة غذائية جديدة لك!`
+          : `Your coach ${currentUserName} assigned a personalized AI nutrition plan to your profile!`
+      );
+      alert(lang === "ar" ? "تم حفظ الخطة الغذائية وتنبيه المتدرب بنجاح!" : "Nutrition plan saved and assigned to trainee!");
+    } catch (err) {
+      console.error("Error saving AI nutrition plan:", err);
+      alert(lang === "ar" ? "حدث خطأ أثناء حفظ الخطة الغذائية" : "Error saving nutrition plan");
     } finally {
       setLoadingProgram(false);
     }
@@ -599,6 +632,8 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
           getDaysRemaining={getDaysRemaining}
           isExpiringSoon={isExpiringSoon}
           loadMyTrainees={loadMyTrainees}
+          nutritionSummary={program?.nutritionSummary}
+          onSaveNutritionPlan={handleSaveNutritionPlan}
           workoutDays={workoutDays}
           setWorkoutDays={setWorkoutDays}
           dietMeals={dietMeals}
