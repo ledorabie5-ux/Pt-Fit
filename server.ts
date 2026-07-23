@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 
 dotenv.config();
@@ -382,11 +382,6 @@ ${languageInstruction}`;
     }
   });
 
-  // Catch-all for unmatched /api routes so they return JSON instead of HTML
-  app.all("/api/*", (req, res) => {
-    res.status(404).json({ error: `API endpoint '${req.originalUrl}' not found.` });
-  });
-
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -401,17 +396,6 @@ ${languageInstruction}`;
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
-
-  // Global Express Error Handling Middleware (Always returns JSON for errors)
-  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error("Global express error:", err);
-    if (res.headersSent) {
-      return _next(err);
-    }
-    res.status(500).json({
-      error: err?.message || "Internal server error occurred"
-    });
-  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);

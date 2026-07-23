@@ -84,38 +84,6 @@ export default function AINutritionModal({
 
   const isArabic = lang === "ar";
 
-  // Helper to safely parse API responses and prevent unhandled non-JSON / HTML errors
-  const parseApiResponse = async (response: Response) => {
-    const rawText = await response.text();
-    let resData: any = null;
-
-    if (rawText && (rawText.trim().startsWith("{") || rawText.trim().startsWith("["))) {
-      try {
-        resData = JSON.parse(rawText);
-      } catch (err) {
-        console.warn("JSON parse attempt failed on raw response text:", err);
-      }
-    }
-
-    if (!resData) {
-      if (response.status === 404) {
-        throw new Error(isArabic ? "خدمة الذكاء الاصطناعي غير متاحة حالياً (404)" : "API endpoint not found (404)");
-      }
-      if (response.status >= 500) {
-        throw new Error(isArabic ? "خطأ في خادم الذكاء الاصطناعي (500). يرجى المحاولة لاحقاً" : `Server error (${response.status}). Please try again.`);
-      }
-      const snippet = rawText.length > 80 ? rawText.slice(0, 80) + "..." : rawText;
-      throw new Error(isArabic ? `استجابة غير متوقعة من الخادم: ${snippet}` : `Unexpected server response: ${snippet}`);
-    }
-
-    if (!response.ok || resData.success === false) {
-      throw new Error(resData.error || resData.message || (isArabic ? "فشلت العملية" : "Request failed"));
-    }
-
-    return resData;
-  };
-
-  // Generate AI plan
   const handleGeneratePlan = async () => {
     setLoading(true);
     setError(null);
@@ -147,11 +115,13 @@ export default function AINutritionModal({
         })
       });
 
-      const resData = await parseApiResponse(response);
+      const resData = await response.json();
+
+      if (!response.ok || !resData.success) {
+        throw new Error(resData.error || "Failed to generate AI nutrition plan");
+      }
 
       const plan = resData.data;
-      if (!plan) throw new Error(isArabic ? "بيانات الخطة غير مكتملة" : "Plan data missing in server response");
-
       setDailyCalories(plan.dailyCalories);
       setProteinGrams(plan.proteinGrams);
       setCarbsGrams(plan.carbsGrams);
@@ -184,7 +154,7 @@ export default function AINutritionModal({
       setActiveStep("plan");
       setSuccessMsg(isArabic ? "تم توليد الخطة الغذائية بالذكاء الاصطناعي بنجاح!" : "AI Meal plan generated successfully!");
     } catch (err: any) {
-      console.error("AI Plan Generation Error:", err);
+      console.error(err);
       setError(err.message || (isArabic ? "حدث خطأ أثناء الاتصال بخدمة الذكاء الاصطناعي" : "Error connecting to AI service"));
     } finally {
       setLoading(false);
@@ -216,9 +186,9 @@ export default function AINutritionModal({
         })
       });
 
-      const resData = await parseApiResponse(response);
-      if (!resData.meal) {
-        throw new Error(isArabic ? "بيانات الوجبة المسترجعة غير مكتملة" : "Meal data missing in server response");
+      const resData = await response.json();
+      if (!response.ok || !resData.success || !resData.meal) {
+        throw new Error(resData.error || "Failed to regenerate single meal");
       }
 
       const newMeal: DietMeal = resData.meal;
