@@ -171,27 +171,17 @@ export default function App() {
             🌐 {getTranslation(lang, "langName")}
           </button>
 
-          <div className="hidden md:flex items-center gap-2.5 text-right rtl:text-left shrink-0">
-            {currentUser.photoUrl && (
-              <img
-                src={currentUser.photoUrl}
-                alt={currentUser.name}
-                referrerPolicy="no-referrer"
-                className="h-8 w-8 rounded-full object-cover border border-emerald-500/50 shadow shrink-0"
-              />
-            )}
-            <div className="flex flex-col items-end text-right rtl:items-start rtl:text-left">
-              <span className="text-xs font-bold text-white">{currentUser.name}</span>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className={`text-[8px] md:text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full border uppercase leading-none ${
-                  currentUser.role === "admin" ? "bg-indigo-950/80 text-indigo-400 border-indigo-800/40" :
-                  currentUser.role === "coach" ? "bg-emerald-950/80 text-emerald-400 border-emerald-800/40" :
-                  "bg-teal-950/80 text-teal-400 border-teal-800/40"
-                }`}>
-                  {getTranslation(lang, currentUser.role as any)}
-                </span>
-                <span className="h-1 w-1 rounded-full bg-emerald-400 animate-pulse" />
-              </div>
+          <div className="hidden md:flex flex-col items-end text-right rtl:items-start rtl:text-left shrink-0">
+            <span className="text-xs font-bold text-white">{currentUser.name}</span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`text-[8px] md:text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full border uppercase leading-none ${
+                currentUser.role === "admin" ? "bg-indigo-950/80 text-indigo-400 border-indigo-800/40" :
+                currentUser.role === "coach" ? "bg-emerald-950/80 text-emerald-400 border-emerald-800/40" :
+                "bg-teal-950/80 text-teal-400 border-teal-800/40"
+              }`}>
+                {getTranslation(lang, currentUser.role as any)}
+              </span>
+              <span className="h-1 w-1 rounded-full bg-emerald-400 animate-pulse" />
             </div>
           </div>
 

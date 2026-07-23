@@ -65,36 +65,11 @@ export interface WorkoutDay {
   focus?: string;
 }
 
-export interface FoodItem {
-  id?: string;
-  name: string;
-  quantity: string;
-  calories?: number;
-  protein?: number;
-  carbs?: number;
-  fats?: number;
-}
-
 export interface DietMeal {
   id: string;
   mealName: string; // e.g., "Breakfast", "Lunch"
   foodItems: string;
-  calories?: string | number;
-  protein?: string | number;
-  carbs?: string | number;
-  fats?: string | number;
-  foods?: FoodItem[];
-}
-
-export interface AINutritionSummary {
-  dailyCalories: number;
-  proteinGrams: number;
-  carbsGrams: number;
-  fatsGrams: number;
-  bmr?: number;
-  tdee?: number;
-  summary?: string;
-  calculatedAt?: string;
+  calories?: string;
 }
 
 export interface Program {
@@ -103,7 +78,6 @@ export interface Program {
   coachId: string;
   workoutDays: WorkoutDay[];
   dietMeals: DietMeal[];
-  nutritionSummary?: AINutritionSummary;
   updatedAt: string;
 }
 

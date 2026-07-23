@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { EXERCISE_LIBRARY, MUSCLE_GROUPS, LibraryExercise } from "../constants/exerciseLibrary";
-import { Language } from "../utils/translations";
+import { Language } from "../types";
 import { Play, Plus, Search, Video, X, Flame } from "lucide-react";
 
 interface ExerciseLibrarySelectorProps {

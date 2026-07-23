@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { UserDoc } from "../types";
-import { Language } from "../utils/translations";
+import { UserDoc, Language } from "../types";
 import { CalendarDays, Search, User, ShieldAlert, Check } from "lucide-react";
 
 interface SubscriptionManagementTabProps {
