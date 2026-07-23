@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { UserDoc, WorkoutTemplate, NutritionTemplate, WorkoutDay, DietMeal, ProgressLog } from "../types";
+import { UserDoc, WorkoutTemplate, NutritionTemplate, WorkoutDay, DietMeal, ProgressLog, AINutritionSummary } from "../types";
 import ChatWindow from "./ChatWindow";
 import ExerciseLibrarySelector from "./ExerciseLibrarySelector";
 
@@ -43,8 +43,10 @@ function getVimeoEmbedUrl(url: string): string | null {
 }
 import { 
   User, Search, RefreshCw, Dumbbell, Apple, ClipboardList, 
-  LineChart, MessageSquare, Plus, Trash2, Video, Save, FolderOpen, Upload, X, Activity
+  LineChart, MessageSquare, Plus, Trash2, Video, Save, FolderOpen, Upload, X, Activity, Sparkles, Utensils
 } from "lucide-react";
+import AINutritionModal from "./AINutritionModal";
+import { Language } from "../utils/translations";
 
 interface ClientManagementTabProps {
   myTrainees: UserDoc[];
@@ -59,6 +61,9 @@ interface ClientManagementTabProps {
   getDaysRemaining: (expiryDateStr?: string) => number;
   isExpiringSoon: (t: UserDoc) => boolean;
   loadMyTrainees: () => Promise<void>;
+  lang?: Language;
+  nutritionSummary?: AINutritionSummary;
+  onSaveNutritionPlan?: (meals: DietMeal[], summary: AINutritionSummary) => Promise<void>;
   
   // Program Schedule
   workoutDays: WorkoutDay[];
@@ -109,9 +114,13 @@ export default function ClientManagementTab({
   getDaysRemaining,
   isExpiringSoon,
   loadMyTrainees,
+  lang = "en",
+  nutritionSummary,
+  onSaveNutritionPlan,
   workoutDays,
   setWorkoutDays,
   dietMeals,
+  setDietMeals,
   activeDayId,
   setActiveDayId,
   newExercise,
@@ -130,11 +139,13 @@ export default function ClientManagementTab({
   loadingProgress,
   onSaveNotesAndMeasurements
 }: ClientManagementTabProps) {
+  const isArabic = lang === "ar";
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"workout" | "diet" | "notes-measurements" | "progress" | "chat">("workout");
   const [exerciseSourceMode, setExerciseSourceMode] = useState<"library" | "custom">("library");
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activeVideoName, setActiveVideoName] = useState<string>("");
+  const [isAIModalOpen, setIsAIModalOpen] = useState<boolean>(false);
 
   // Local state for notes & measurements
   const [notes, setNotes] = useState("");
@@ -200,10 +211,10 @@ export default function ClientManagementTab({
       <div className="lg:col-span-4 bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-4">
         <div className="border-b border-neutral-800 pb-3 flex justify-between items-center">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <User className="text-emerald-400 h-4 w-4" /> Client Search & Roster
+            <User className="text-emerald-400 h-4 w-4" /> {isArabic ? "قائمة وبحث المشتركين" : "Client Search & Roster"}
           </h3>
           <button onClick={loadMyTrainees} className="text-[10px] text-emerald-400 hover:underline flex items-center gap-1">
-            <RefreshCw className="h-3 w-3" /> Refresh
+            <RefreshCw className="h-3 w-3" /> {isArabic ? "تحديث" : "Refresh"}
           </button>
         </div>
 
@@ -211,7 +222,7 @@ export default function ClientManagementTab({
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-neutral-500" />
           <input
             type="text"
-            placeholder="Search by phone or name..."
+            placeholder={isArabic ? "البحث بالاسم أو رقم الهاتف..." : "Search by phone or name..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-neutral-950 border border-neutral-800 rounded-lg pl-8.5 pr-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition-all"
@@ -220,7 +231,7 @@ export default function ClientManagementTab({
 
         <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
           {filtered.length === 0 ? (
-            <p className="text-xs text-neutral-500 italic px-1">No clients found.</p>
+            <p className="text-xs text-neutral-500 italic px-1">{isArabic ? "لم يتم العثور على مشتركين." : "No clients found."}</p>
           ) : (
             filtered.map(t => {
               const isSelected = selectedTrainee?.uid === t.uid;
@@ -229,7 +240,7 @@ export default function ClientManagementTab({
                 <button
                   key={t.uid}
                   onClick={() => setSelectedTrainee(t)}
-                  className={`w-full text-left px-4 py-2.5 rounded-lg border flex items-center justify-between transition-all cursor-pointer ${
+                  className={`w-full text-left rtl:text-right px-4 py-2.5 rounded-lg border flex items-center justify-between transition-all cursor-pointer ${
                     isSelected
                       ? "bg-emerald-950/20 border-emerald-500 shadow-md"
                       : "bg-neutral-950/60 border-neutral-800/80 hover:bg-neutral-900/40"
@@ -250,10 +261,10 @@ export default function ClientManagementTab({
                           <span className="inline-block h-2 w-2 rounded-full bg-red-500 animate-pulse" />
                         )}
                       </p>
-                      <p className="text-[9px] text-neutral-400 font-mono">{t.phone || "No phone listed"}</p>
+                      <p className="text-[9px] text-neutral-400 font-mono">{t.phone || (isArabic ? "بدون رقم هاتف" : "No phone listed")}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right rtl:text-left">
                     <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full border font-mono ${
                       t.subscriptionStatus === "active"
                         ? expiring 
@@ -263,7 +274,7 @@ export default function ClientManagementTab({
                         ? "bg-amber-950 text-amber-400 border-amber-800/40"
                         : "bg-neutral-900 text-neutral-500 border-neutral-800"
                     }`}>
-                      {t.subscriptionStatus?.toUpperCase() || "EXPIRED"}
+                      {t.subscriptionStatus === "active" ? (isArabic ? "نشط" : "ACTIVE") : t.subscriptionStatus === "frozen" ? (isArabic ? "مُجمد" : "FROZEN") : (isArabic ? "منتهي" : "EXPIRED")}
                     </span>
                   </div>
                 </button>
@@ -281,9 +292,11 @@ export default function ClientManagementTab({
               <ClipboardList className="h-8 w-8" />
             </div>
             <div className="max-w-sm">
-              <h3 className="text-md font-bold text-white">Client Management Profile</h3>
+              <h3 className="text-md font-bold text-white">{isArabic ? "ملف إدارة المشترك" : "Client Management Profile"}</h3>
               <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
-                Select a client from your roster on the left to start editing workout programs, meals, notes, body measurements, progress logs, and chat support.
+                {isArabic
+                  ? "اختر مشتركاً من القائمة الجانبية لبدء تعديل وتمارين وأنظمة التغذية والملاحظات والدردشة."
+                  : "Select a client from your roster on the left to start editing workout programs, meals, notes, body measurements, progress logs, and chat support."}
               </p>
             </div>
           </div>
@@ -327,17 +340,17 @@ export default function ClientManagementTab({
             <div className="px-6 py-3 bg-neutral-950/80 border-b border-neutral-850">
               <div className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 font-bold">
                 <Activity className="h-3.5 w-3.5" />
-                <span>Trainee Fitness Profile & Biometrics</span>
+                <span>{isArabic ? "بيانات وقياسات المشترك البدنية" : "Trainee Fitness Profile & Biometrics"}</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 text-xs">
                 <div className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
-                  <span className="text-[10px] text-neutral-500 block font-mono">Fitness Goal</span>
-                  <span className="text-white font-bold text-xs truncate block mt-0.5">{selectedTrainee.fitnessGoal || "Not set"}</span>
+                  <span className="text-[10px] text-neutral-500 block font-mono">{isArabic ? "الهدف الرياضي" : "Fitness Goal"}</span>
+                  <span className="text-white font-bold text-xs truncate block mt-0.5">{selectedTrainee.fitnessGoal || (isArabic ? "غير محدد" : "Not set")}</span>
                 </div>
                 <div className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
-                  <span className="text-[10px] text-neutral-500 block font-mono">Height / Weight</span>
+                  <span className="text-[10px] text-neutral-500 block font-mono">{isArabic ? "الطول / الوزن" : "Height / Weight"}</span>
                   <span className="text-white font-bold text-xs block mt-0.5">
-                    {selectedTrainee.height ? `${selectedTrainee.height} cm` : "-"} / {selectedTrainee.weight ? `${selectedTrainee.weight} kg` : "-"}
+                    {selectedTrainee.height ? `${selectedTrainee.height} سم` : "-"} / {selectedTrainee.weight ? `${selectedTrainee.weight} كجم` : "-"}
                     {selectedTrainee.height && selectedTrainee.weight && (
                       <span className="text-[10px] text-emerald-400 font-mono block font-normal">
                         BMI: {(selectedTrainee.weight / Math.pow(selectedTrainee.height / 100, 2)).toFixed(1)}
@@ -346,18 +359,18 @@ export default function ClientManagementTab({
                   </span>
                 </div>
                 <div className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
-                  <span className="text-[10px] text-neutral-500 block font-mono">Age / Gender</span>
+                  <span className="text-[10px] text-neutral-500 block font-mono">{isArabic ? "العمر / الجنس" : "Age / Gender"}</span>
                   <span className="text-white font-bold text-xs block mt-0.5">
-                    {selectedTrainee.age ? `${selectedTrainee.age} yrs` : "-"} • {selectedTrainee.gender || "-"}
+                    {selectedTrainee.age ? `${selectedTrainee.age} سنة` : "-"} • {selectedTrainee.gender || "-"}
                   </span>
                 </div>
                 <div className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
-                  <span className="text-[10px] text-neutral-500 block font-mono">Experience</span>
-                  <span className="text-white font-bold text-xs block mt-0.5">{selectedTrainee.trainingExperience || "Beginner"}</span>
+                  <span className="text-[10px] text-neutral-500 block font-mono">{isArabic ? "مستوى الخبرة" : "Experience"}</span>
+                  <span className="text-white font-bold text-xs block mt-0.5">{selectedTrainee.trainingExperience || (isArabic ? "مبتدئ" : "Beginner")}</span>
                 </div>
                 <div className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
-                  <span className="text-[10px] text-neutral-500 block font-mono">Activity Level</span>
-                  <span className="text-white font-bold text-xs block mt-0.5 truncate">{selectedTrainee.activityLevel || "Moderately Active"}</span>
+                  <span className="text-[10px] text-neutral-500 block font-mono">{isArabic ? "مستوى النشاط" : "Activity Level"}</span>
+                  <span className="text-white font-bold text-xs block mt-0.5 truncate">{selectedTrainee.activityLevel || (isArabic ? "نشاط متوسط" : "Moderately Active")}</span>
                 </div>
               </div>
             </div>
@@ -366,11 +379,11 @@ export default function ClientManagementTab({
             <div className="px-6 border-b border-neutral-800">
               <div className="flex space-x-6 overflow-x-auto pb-px">
                 {[
-                  { id: "workout", name: "Workout Plan", icon: Dumbbell },
-                  { id: "diet", name: "Nutrition Plan", icon: Apple },
-                  { id: "notes-measurements", name: "Notes & Measurements", icon: ClipboardList },
-                  { id: "progress", name: "Progress History", icon: LineChart },
-                  { id: "chat", name: "Chat Support", icon: MessageSquare }
+                  { id: "workout", name: isArabic ? "جدول التمارين" : "Workout Plan", icon: Dumbbell },
+                  { id: "diet", name: isArabic ? "النظام الغذائي" : "Nutrition Plan", icon: Apple },
+                  { id: "notes-measurements", name: isArabic ? "الملاحظات والقياسات" : "Notes & Measurements", icon: ClipboardList },
+                  { id: "progress", name: isArabic ? "سجل التقدم" : "Progress History", icon: LineChart },
+                  { id: "chat", name: isArabic ? "الدردشة والدعم" : "Chat Support", icon: MessageSquare }
                 ].map(tab => {
                   const Icon = tab.icon;
                   const isCurrent = activeTab === tab.id;
@@ -696,6 +709,74 @@ export default function ClientManagementTab({
             {/* Sub-tab 2: Nutrition Plan */}
             {activeTab === "diet" && (
               <div className="p-6 space-y-6">
+                {/* AI Nutrition Assistant Banner */}
+                <div className="bg-gradient-to-r from-emerald-950 via-neutral-900 to-teal-950 border border-emerald-800/40 rounded-xl p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-emerald-400 animate-pulse" />
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                        {lang === "ar" ? "مساعد التغذية بالذكاء الاصطناعي" : "AI Nutrition Assistant"}
+                      </h4>
+                      <span className="bg-emerald-950 text-emerald-400 text-[9px] font-mono px-2 py-0.5 rounded-full border border-emerald-800/40">
+                        Smart Meal Planner
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-300 max-w-xl">
+                      {lang === "ar"
+                        ? "توليد خطة غذائية متكاملة ومحسوبة بالجرامات والسعرات والماكروز تلقائياً مع التحكم الكامل والتعديل المباشر قبل الحفظ."
+                        : "Generate personalized meal plans with calculated calories & macros based on client biometrics with full coach control and direct editing."}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => setIsAIModalOpen(true)}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-bold text-xs px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-950/50 flex items-center gap-2 shrink-0 cursor-pointer"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    <span>{lang === "ar" ? "توليد/تعديل نظام غذائي بالذكاء الاصطناعي" : "Open AI Meal Planner"}</span>
+                  </button>
+                </div>
+
+                {/* Nutrition Summary Card if available */}
+                {nutritionSummary && (
+                  <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center border-b border-neutral-900 pb-2">
+                      <h5 className="text-xs font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
+                        <Utensils className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>{lang === "ar" ? "ملخص أهداف السعرات اليومية والماكروز" : "Daily Target Calories & Macros Summary"}</span>
+                      </h5>
+                      <span className="text-[10px] text-neutral-500 font-mono">
+                        {nutritionSummary.calculatedAt ? new Date(nutritionSummary.calculatedAt).toLocaleDateString() : "Assigned"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
+                      <div className="bg-neutral-900 p-2.5 rounded-lg border border-emerald-900/40">
+                        <span className="text-[9px] font-mono text-neutral-500 uppercase block">{lang === "ar" ? "السعرات" : "Calories"}</span>
+                        <span className="text-emerald-400 font-extrabold font-mono text-sm">{nutritionSummary.dailyCalories} kcal</span>
+                      </div>
+                      <div className="bg-neutral-900 p-2.5 rounded-lg border border-neutral-800">
+                        <span className="text-[9px] font-mono text-neutral-500 uppercase block">{lang === "ar" ? "بروتين" : "Protein"}</span>
+                        <span className="text-white font-bold font-mono text-sm">{nutritionSummary.proteinGrams}g</span>
+                      </div>
+                      <div className="bg-neutral-900 p-2.5 rounded-lg border border-neutral-800">
+                        <span className="text-[9px] font-mono text-neutral-500 uppercase block">{lang === "ar" ? "كربوهيدرات" : "Carbs"}</span>
+                        <span className="text-white font-bold font-mono text-sm">{nutritionSummary.carbsGrams}g</span>
+                      </div>
+                      <div className="bg-neutral-900 p-2.5 rounded-lg border border-neutral-800">
+                        <span className="text-[9px] font-mono text-neutral-500 uppercase block">{lang === "ar" ? "دهون" : "Fats"}</span>
+                        <span className="text-white font-bold font-mono text-sm">{nutritionSummary.fatsGrams}g</span>
+                      </div>
+                    </div>
+
+                    {nutritionSummary.summary && (
+                      <p className="text-[11px] text-neutral-400 leading-relaxed bg-neutral-900/50 p-2.5 rounded border border-neutral-850">
+                        {nutritionSummary.summary}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="bg-neutral-950 rounded-lg p-4 border border-neutral-800 space-y-3">
                   <div className="flex justify-between items-center">
                     <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">⚡ Apply Reusable Nutrition Template</h4>
@@ -723,21 +804,44 @@ export default function ClientManagementTab({
 
                   {dietMeals.length === 0 ? (
                     <div className="text-center py-10 bg-neutral-950/40 rounded-lg border border-neutral-800/30 text-xs text-neutral-500">
-                      No diet meals configured. Setup meal plans or apply a template above!
+                      No diet meals configured. Click "Open AI Meal Planner" or setup meals manually below!
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {dietMeals.map(meal => (
                         <div key={meal.id} className="p-4 bg-neutral-950 border border-neutral-800 rounded-lg flex justify-between items-start gap-4">
-                          <div className="space-y-1 flex-1 text-xs">
-                            <p className="font-bold text-emerald-400 font-mono uppercase tracking-wider">{meal.mealName}</p>
-                            <p className="text-white leading-relaxed whitespace-pre-wrap">{meal.foodItems}</p>
-                            {meal.calories && (
-                              <span className="inline-block bg-neutral-900 px-2 py-0.5 border border-neutral-800 rounded text-[9px] font-mono text-neutral-400 mt-1">
-                                Calories: {meal.calories} kcal
-                              </span>
+                          <div className="space-y-1.5 flex-1 text-xs">
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-emerald-400 font-mono uppercase tracking-wider">{meal.mealName}</p>
+                              {meal.calories && (
+                                <span className="inline-block bg-emerald-950/80 border border-emerald-800/40 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-mono font-bold">
+                                  {meal.calories} kcal
+                                </span>
+                              )}
+                              {(meal.protein || meal.carbs || meal.fats) && (
+                                <span className="text-[10px] font-mono text-neutral-400">
+                                  (P: {meal.protein || 0}g | C: {meal.carbs || 0}g | F: {meal.fats || 0}g)
+                                </span>
+                              )}
+                            </div>
+
+                            {meal.foods && meal.foods.length > 0 ? (
+                              <div className="space-y-1 pt-1">
+                                {meal.foods.map((f, fIdx) => (
+                                  <div key={f.id || fIdx} className="bg-neutral-900/60 p-2 rounded border border-neutral-850 flex justify-between items-center text-xs">
+                                    <span className="text-white font-medium">• {f.name}</span>
+                                    <div className="flex items-center gap-2 text-[11px] font-mono">
+                                      <span className="text-emerald-400 font-bold">{f.quantity}</span>
+                                      <span className="text-neutral-400">({f.calories || 0} kcal | P:{f.protein || 0}g)</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-white leading-relaxed whitespace-pre-wrap">{meal.foodItems}</p>
                             )}
                           </div>
+
                           <button onClick={() => handleDeleteMeal(meal.id)} className="text-neutral-500 hover:text-red-400 p-1 shrink-0 cursor-pointer">
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -995,6 +1099,24 @@ export default function ClientManagementTab({
           </div>
         </div>
       )}
+
+      {/* AI Nutrition Assistant Modal */}
+      <AINutritionModal
+        isOpen={isAIModalOpen}
+        onClose={() => setIsAIModalOpen(false)}
+        client={selectedTrainee}
+        lang={lang}
+        existingSummary={nutritionSummary}
+        existingMeals={dietMeals}
+        onSaveNutritionPlan={async (newMeals, summary) => {
+          if (onSaveNutritionPlan) {
+            await onSaveNutritionPlan(newMeals, summary);
+          } else {
+            setDietMeals(newMeals);
+            await handleSaveProgram();
+          }
+        }}
+      />
     </div>
   );
 }

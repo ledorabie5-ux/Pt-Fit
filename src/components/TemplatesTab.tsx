@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { WorkoutTemplate, NutritionTemplate, WorkoutDay, Exercise, DietMeal, Language } from "../types";
+import { WorkoutTemplate, NutritionTemplate, WorkoutDay, Exercise, DietMeal } from "../types";
+import { Language } from "../utils/translations";
 import { Layers, Trash2, Plus, Dumbbell, Apple, Video, FolderOpen, Upload } from "lucide-react";
 import ExerciseLibrarySelector from "./ExerciseLibrarySelector";
 

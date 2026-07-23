@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { UserDoc, Language } from "../types";
+import { UserDoc } from "../types";
+import { Language } from "../utils/translations";
 import { UserPlus, AlertTriangle } from "lucide-react";
 
 interface AddMemberTabProps {
