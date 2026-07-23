@@ -6,7 +6,9 @@ import {
   Dumbbell, Apple, LineChart, MessageSquare, Calendar, Clock, 
   Video, CheckCircle2, AlertTriangle, Check, User, X, Users, MessageCircle, ExternalLink, Award, Camera, Upload
 } from "lucide-react";
+import AINutritionGenerator from "./AINutritionGenerator";
 import AllCoachesView from "./AllCoachesView";
+import { updateProgram } from "../services/dbService";
 import { Language, getTranslation } from "../utils/translations";
 
 interface TraineeDashboardProps {
@@ -56,6 +58,8 @@ function getVimeoEmbedUrl(url: string): string | null {
 
 export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: TraineeDashboardProps) {
   const [activeTab, setActiveTab] = useState<"workouts" | "diet" | "history" | "chat" | "subscription" | "info" | "coaches">("workouts");
+  const [dietSubTab, setDietSubTab] = useState<"assigned" | "ai_generator">("assigned");
+  const [isSavingAiPlan, setIsSavingAiPlan] = useState(false);
 
   // Plan data
   const [program, setProgram] = useState<Program | null>(null);
@@ -495,103 +499,100 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
 
                 {/* MY DIET PLAN TAB */}
                 {activeTab === "diet" && (
-                  <div className="space-y-5">
-                    <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-800">
-                      <h4 className="text-xs font-mono text-emerald-400 uppercase tracking-widest">{getTranslation(lang, "traineeDietTab").toUpperCase()}</h4>
-                      <h3 className="text-md font-bold text-white mt-0.5">{lang === "ar" ? "نظام التغذية والوجبات المخصصة" : "Personalized Meal Nutrition Plans"}</h3>
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-neutral-950 p-4 rounded-xl border border-neutral-800">
+                      <div>
+                        <h4 className="text-xs font-mono text-emerald-400 uppercase tracking-widest">{getTranslation(lang, "traineeDietTab").toUpperCase()}</h4>
+                        <h3 className="text-md font-bold text-white mt-0.5">{lang === "ar" ? "نظام التغذية والوجبات اليومية" : "Personalized Meal & Sports Nutrition"}</h3>
+                      </div>
+
+                      <div className="flex items-center gap-2 bg-neutral-900 p-1 rounded-xl border border-neutral-800">
+                        <button
+                          type="button"
+                          onClick={() => setDietSubTab("assigned")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            dietSubTab === "assigned"
+                              ? "bg-emerald-600 text-white shadow"
+                              : "text-neutral-400 hover:text-white"
+                          }`}
+                        >
+                          {lang === "ar" ? "الوجبات المعتمدة" : "Current Diet Plan"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDietSubTab("ai_generator")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            dietSubTab === "ai_generator"
+                              ? "bg-emerald-600 text-white shadow"
+                              : "text-neutral-400 hover:text-white"
+                          }`}
+                        >
+                          <span>✨</span>
+                          <span>{lang === "ar" ? "نظام التغذية الذكي AI" : "AI Sports Nutrition"}</span>
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Nutrition Targets Overview if available */}
-                    {program?.nutritionSummary && (
-                      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 space-y-3.5 shadow-lg">
-                        <div className="flex justify-between items-center border-b border-neutral-850 pb-2.5">
-                          <div className="flex items-center gap-2">
-                            <Apple className="h-4 w-4 text-emerald-400" />
-                            <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                              {lang === "ar" ? "إجمالي السعرات والماكروز المستهدفة" : "Target Daily Calories & Macronutrients"}
-                            </h4>
+                    {dietSubTab === "assigned" ? (
+                      <div>
+                        {dietMeals.length === 0 ? (
+                          <div className="text-center py-16 border border-dashed border-neutral-800 rounded-xl text-neutral-500 text-xs">
+                            {getTranslation(lang, "noDietPlan")}
                           </div>
-                          <span className="text-[10px] text-emerald-400 bg-emerald-950/80 border border-emerald-800/40 px-2.5 py-0.5 rounded-full font-mono font-bold">
-                            {lang === "ar" ? "خطة الذكاء الاصطناعي" : "AI Custom Plan"}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                          <div className="bg-neutral-900/90 p-3 rounded-xl border border-emerald-900/40">
-                            <span className="text-[9px] font-mono text-neutral-400 uppercase block">{lang === "ar" ? "السعرات اليومية" : "Daily Calories"}</span>
-                            <span className="text-lg font-extrabold text-emerald-400 font-mono block">{program.nutritionSummary.dailyCalories} kcal</span>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {dietMeals.map(meal => (
+                              <div key={meal.id} className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex flex-col justify-between">
+                                <div className="space-y-2">
+                                  <div className="flex justify-between items-start border-b border-neutral-900 pb-2">
+                                    <h5 className="text-xs font-bold text-white">{meal.mealName}</h5>
+                                    {meal.calories && (
+                                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/30 px-2 py-0.5 rounded">
+                                        {meal.calories}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-neutral-300 font-mono whitespace-pre-line leading-relaxed pt-1">
+                                    {meal.foodItems}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                          <div className="bg-neutral-900/90 p-3 rounded-xl border border-neutral-800">
-                            <span className="text-[9px] font-mono text-neutral-400 uppercase block">{lang === "ar" ? "البروتين" : "Protein"}</span>
-                            <span className="text-md font-bold text-white font-mono block">{program.nutritionSummary.proteinGrams}g</span>
-                          </div>
-                          <div className="bg-neutral-900/90 p-3 rounded-xl border border-neutral-800">
-                            <span className="text-[9px] font-mono text-neutral-400 uppercase block">{lang === "ar" ? "الكربوهيدرات" : "Carbohydrates"}</span>
-                            <span className="text-md font-bold text-white font-mono block">{program.nutritionSummary.carbsGrams}g</span>
-                          </div>
-                          <div className="bg-neutral-900/90 p-3 rounded-xl border border-neutral-800">
-                            <span className="text-[9px] font-mono text-neutral-400 uppercase block">{lang === "ar" ? "الدهون الصحية" : "Healthy Fats"}</span>
-                            <span className="text-md font-bold text-white font-mono block">{program.nutritionSummary.fatsGrams}g</span>
-                          </div>
-                        </div>
-
-                        {program.nutritionSummary.summary && (
-                          <p className="text-xs text-neutral-300 leading-relaxed bg-neutral-900/40 p-3 rounded-xl border border-neutral-850">
-                            {program.nutritionSummary.summary}
-                          </p>
                         )}
                       </div>
-                    )}
-
-                    {dietMeals.length === 0 ? (
-                      <div className="text-center py-16 border border-dashed border-neutral-800 rounded-xl text-neutral-500 text-xs">
-                        {getTranslation(lang, "noDietPlan")}
-                      </div>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {dietMeals.map(meal => (
-                          <div key={meal.id} className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex flex-col justify-between shadow-md space-y-3">
-                            <div className="space-y-2">
-                              <div className="flex justify-between items-start border-b border-neutral-900 pb-2">
-                                <h5 className="text-xs font-bold text-white">{meal.mealName}</h5>
-                                {meal.calories && (
-                                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/30 px-2 py-0.5 rounded font-bold">
-                                    {meal.calories} kcal
-                                  </span>
-                                )}
-                              </div>
-
-                              {(meal.protein || meal.carbs || meal.fats) && (
-                                <div className="flex gap-2 text-[10px] font-mono text-neutral-400 bg-neutral-900/60 p-1.5 rounded border border-neutral-850">
-                                  <span>P: <strong className="text-white">{meal.protein || 0}g</strong></span>
-                                  <span>•</span>
-                                  <span>C: <strong className="text-white">{meal.carbs || 0}g</strong></span>
-                                  <span>•</span>
-                                  <span>F: <strong className="text-white">{meal.fats || 0}g</strong></span>
-                                </div>
-                              )}
-
-                              {meal.foods && meal.foods.length > 0 ? (
-                                <div className="space-y-1.5 pt-1">
-                                  {meal.foods.map((food, fIdx) => (
-                                    <div key={food.id || fIdx} className="bg-neutral-900/40 p-2 rounded-lg border border-neutral-850/80 flex justify-between items-center text-xs">
-                                      <span className="text-neutral-200 font-medium">• {food.name}</span>
-                                      <div className="flex items-center gap-2 text-[11px] font-mono">
-                                        <span className="text-emerald-400 font-bold">{food.quantity}</span>
-                                        {food.calories ? <span className="text-neutral-500">({food.calories} kcal)</span> : null}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-xs text-neutral-300 font-mono whitespace-pre-line leading-relaxed pt-1">
-                                  {meal.foodItems}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <AINutritionGenerator
+                        initialWeight={currentUser.weight || 75}
+                        initialHeight={currentUser.height || 175}
+                        initialAge={currentUser.age || 25}
+                        initialGender={(currentUser.gender === "Female" || currentUser.gender === "female") ? "female" : "male"}
+                        initialGoal={currentUser.fitnessGoal || "Muscle Gain"}
+                        lang={lang}
+                        isSaving={isSavingAiPlan}
+                        onSavePlanToProgram={async (newMeals) => {
+                          setIsSavingAiPlan(true);
+                          try {
+                            const updatedWorkoutDays = program?.workoutDays || [];
+                            const updatedProgram: Program = {
+                              id: currentUser.uid,
+                              traineeId: currentUser.uid,
+                              coachId: currentUser.coachId || "",
+                              workoutDays: updatedWorkoutDays,
+                              dietMeals: newMeals,
+                              updatedAt: new Date().toISOString()
+                            };
+                            await updateProgram(updatedProgram);
+                            setProgram(updatedProgram);
+                            setDietSubTab("assigned");
+                            alert(lang === "ar" ? "تم حفظ واعتماد نظام التغذية بالذكاء الاصطناعي بنجاح!" : "AI Nutrition plan successfully saved to your program!");
+                          } catch (err) {
+                            console.error("Failed to save AI diet plan:", err);
+                          } finally {
+                            setIsSavingAiPlan(false);
+                          }
+                        }}
+                      />
                     )}
                   </div>
                 )}

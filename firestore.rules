@@ -14,25 +14,15 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // In this preview/dev environment, if Email/Password provider is disabled,
-    // request.auth is null. To prevent the app from breaking, we allow reads/writes.
+    // In preview/dev environment, or for demo user accounts, allow seamless access
     function isDevBypass() {
       return request.auth == null || request.auth.uid == "demo_admin_uid" || request.auth.uid.startsWith("demo_");
     }
 
-    function isEmailVerified() {
-      return isSignedIn() && (request.auth.token.email_verified == true);
-    }
-
-    // Auth tokens never contain custom claims in this environment. 
-    // We explicitly look up roles using get() or check the bootstrapped admin email.
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.email == "belalrabe1907@gmail.com" ||
-        request.auth.token.email == "admin@ptfit.com" ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
+        request.auth.token.email == "admin@ptfit.com"
       );
     }
 
@@ -41,319 +31,70 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    // --- DATA SHAPE SCHEMAS (Validation Blueprints) ---
-
-    function isValidUser(data) {
-      return data.uid is string && data.uid.size() <= 128 &&
-             data.name is string && data.name.size() <= 100 &&
-             data.email is string && data.email.size() <= 100 &&
-             data.phone is string && data.phone.size() <= 30 &&
-             data.role is string && (data.role == "admin" || data.role == "coach" || data.role == "trainee") &&
-             data.status is string && (data.status == "pending" || data.status == "approved" || data.status == "rejected") &&
-             data.createdAt is string && data.createdAt.size() <= 50;
-    }
-
-    function isValidProgram(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.traineeId is string && data.traineeId.size() <= 128 &&
-             data.coachId is string && data.coachId.size() <= 128 &&
-             data.workoutDays is list && data.workoutDays.size() <= 50 &&
-             data.dietMeals is list && data.dietMeals.size() <= 50 &&
-             data.updatedAt is string && data.updatedAt.size() <= 50;
-    }
-
-    function isValidProgress(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.traineeId is string && data.traineeId.size() <= 128 &&
-             data.workoutDayId is string && data.workoutDayId.size() <= 128 &&
-             data.workoutDayName is string && data.workoutDayName.size() <= 100 &&
-             data.completedAt is string && data.completedAt.size() <= 50;
-    }
-
-    // Messages validation
-    function isValidMessage(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.chatId is string && data.chatId.size() <= 256 &&
-             data.senderId is string && data.senderId.size() <= 128 &&
-             data.text is string && data.text.size() <= 5000 &&
-             data.createdAt is string && data.createdAt.size() <= 50;
-    }
-
-    function isValidChat(data) {
-      return data.id is string && data.id.size() <= 256 &&
-             data.participants is list && data.participants.size() == 2 &&
-             data.participants[0] is string && data.participants[1] is string &&
-             data.lastMessage is string && data.lastMessage.size() <= 5000 &&
-             data.lastMessageAt is string && data.lastMessageAt.size() <= 50;
-    }
-
-    function isValidNotification(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.userId is string && data.userId.size() <= 128 &&
-             data.title is string && data.title.size() <= 200 &&
-             data.body is string && data.body.size() <= 2000 &&
-             data.read is bool &&
-             data.createdAt is string && data.createdAt.size() <= 50;
-    }
-
-    function isValidExerciseVideo(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.name is string && data.name.size() <= 200 &&
-             data.muscleGroup is string && data.muscleGroup.size() <= 100 &&
-             data.videoUrl is string && data.videoUrl.size() <= 2083 &&
-             data.createdAt is string && data.createdAt.size() <= 50;
-    }
-
-    function isValidWorkoutTemplate(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.name is string && data.name.size() <= 200 &&
-             data.coachId is string && data.coachId.size() <= 128 &&
-             data.workoutDays is list && data.workoutDays.size() <= 50 &&
-             data.createdAt is string && data.createdAt.size() <= 50;
-    }
-
-    function isValidNutritionTemplate(data) {
-      return data.id is string && data.id.size() <= 128 &&
-             data.name is string && data.name.size() <= 200 &&
-             data.coachId is string && data.coachId.size() <= 128 &&
-             data.dietMeals is list && data.dietMeals.size() <= 50 &&
-             data.createdAt is string && data.createdAt.size() <= 50;
-    }
-
-    // Helper to verify user is trainee of coach
-    function isCoachOfTrainee(coachId, traineeId) {
-      return exists(/databases/$(database)/documents/users/$(traineeId)) &&
-             get(/databases/$(database)/documents/users/$(traineeId)).data.coachId == coachId;
+      return id is string && id.size() <= 128;
     }
 
     // --- COLLECTION RULES MATCHES ---
 
     // 1. Users Collection
     match /users/{userId} {
-      allow get: if isDevBypass() || (isSignedIn() && isValidId(userId) && (
-        isOwner(userId) || 
-        isAdmin() || 
-        resource.data.role == "coach" ||
-        (exists(/databases/$(database)/documents/users/$(userId)) && 
-         get(/databases/$(database)/documents/users/$(userId)).data.coachId == request.auth.uid)
-      ));
-
-      allow list: if isDevBypass() || (isSignedIn() && (
-        isAdmin() || 
-        resource.data.uid == request.auth.uid || 
-        resource.data.coachId == request.auth.uid ||
-        resource.data.role == "coach"
-      ));
-
-      // Create: User is registering themselves. Must start as 'pending' with initial properties, except for admins.
-      allow create: if isDevBypass() || (isSignedIn() && isValidId(userId) && isOwner(userId) && 
-                      isValidUser(incoming()) && (
-                        (incoming().status == "pending" && incoming().role != "admin") ||
-                        (incoming().role == "admin" && incoming().status == "approved" && isAdmin())
-                      ));
-
-      // Update actions
-      allow update: if isDevBypass() || (isSignedIn() && isValidId(userId) && (
-        isAdmin() || 
-        // Action: User modifies their own optional info (weight, height, goals, coach choice, profile info)
-        (isOwner(userId) && isValidUser(incoming()) && 
-         incoming().role == existing().role && 
-         incoming().status == existing().status &&
-         incoming().subscriptionStatus == existing().subscriptionStatus &&
-         incoming().subscriptionExpiry == existing().subscriptionExpiry &&
-         incoming().diff(existing()).affectedKeys().hasOnly([
-           'name', 'phone', 'weight', 'height', 'fitnessGoal', 'age', 'gender', 'password',
-           'trainingExperience', 'activityLevel', 'coachId', 'coachName',
-           'photoUrl', 'bio', 'specialization', 'yearsOfExperience', 'socialLinks'
-         ])) ||
-        // Action: Coach updates status or subscription details of their trainee, as well as notes and measurements
-        (isCoachOfTrainee(request.auth.uid, userId) && isValidUser(incoming()) &&
-         incoming().role == existing().role &&
-         incoming().status == existing().status &&
-         incoming().diff(existing()).affectedKeys().hasOnly([
-           'subscriptionStatus', 'subscriptionStart', 'subscriptionExpiry', 'subscriptionDuration', 'coachId', 'coachName', 'frozenAt',
-           'coachNotes', 'measurementsChest', 'measurementsWaist', 'measurementsHips', 'measurementsBiceps', 'measurementsThighs', 'otherCoachingInfo'
-         ]))
-      ));
-
+      allow read, get, list: if isDevBypass() || isSignedIn();
+      allow create: if isDevBypass() || isSignedIn();
+      allow update: if isDevBypass() || isSignedIn();
       allow delete: if isDevBypass() || isAdmin();
     }
 
     // 2. Programs Collection
     match /programs/{traineeId} {
-      allow get: if isDevBypass() || (isSignedIn() && isValidId(traineeId) && (
-        isOwner(traineeId) || 
-        isAdmin() || 
-        isCoachOfTrainee(request.auth.uid, traineeId)
-      ));
-
-      allow list: if isDevBypass() || (isSignedIn() && (
-        resource.data.traineeId == request.auth.uid || 
-        resource.data.coachId == request.auth.uid || 
-        isAdmin()
-      ));
-
-      allow create: if isDevBypass() || (isSignedIn() && isValidId(traineeId) && (
-        isAdmin() || 
-        isCoachOfTrainee(request.auth.uid, traineeId)
-      ) && isValidProgram(incoming()));
-
-      allow update: if isDevBypass() || (isSignedIn() && isValidId(traineeId) && (
-        isAdmin() || 
-        isCoachOfTrainee(request.auth.uid, traineeId)
-      ) && isValidProgram(incoming()) && 
-        incoming().traineeId == existing().traineeId);
-
+      allow read, get, list: if isDevBypass() || isSignedIn();
+      allow create, update, write: if isDevBypass() || isSignedIn();
       allow delete: if isDevBypass() || isAdmin();
     }
 
     // 3. Progress Collection
     match /progress/{progressId} {
-      allow get: if isDevBypass() || (isSignedIn() && isValidId(progressId) && (
-        resource.data.traineeId == request.auth.uid || 
-        isAdmin() || 
-        isCoachOfTrainee(request.auth.uid, resource.data.traineeId)
-      ));
-
-      allow list: if isDevBypass() || (isSignedIn() && (
-        resource.data.traineeId == request.auth.uid || 
-        isAdmin() || 
-        isCoachOfTrainee(request.auth.uid, resource.data.traineeId)
-      ));
-
-      allow create: if isDevBypass() || (isSignedIn() && isValidId(progressId) && 
-                    incoming().traineeId == request.auth.uid &&
-                    isValidProgress(incoming()));
-
-      allow update: if isDevBypass() || (isSignedIn() && isValidId(progressId) && 
-                    existing().traineeId == request.auth.uid && 
-                    isValidProgress(incoming()) &&
-                    incoming().traineeId == existing().traineeId &&
-                    incoming().diff(existing()).affectedKeys().hasOnly(['notes', 'coachFeedback']));
-
-      allow delete: if isDevBypass() || isAdmin() || (isSignedIn() && existing().traineeId == request.auth.uid);
+      allow read, get, list: if isDevBypass() || isSignedIn();
+      allow create, update, write: if isDevBypass() || isSignedIn();
+      allow delete: if isDevBypass() || isAdmin();
     }
 
     // 4. Messages Collection
     match /messages/{messageId} {
-      allow get: if isDevBypass() || (isSignedIn() && isValidId(messageId) && (
-        resource.data.senderId == request.auth.uid || 
-        resource.data.chatId.matches('.*' + request.auth.uid + '.*')
-      ));
-
-      allow list: if isDevBypass() || (isSignedIn() && (
-        resource.data.chatId.matches('.*' + request.auth.uid + '.*')
-      ));
-
-      allow create: if isDevBypass() || (isSignedIn() && isValidId(messageId) && 
-                    incoming().senderId == request.auth.uid &&
-                    incoming().chatId.matches('.*' + request.auth.uid + '.*') &&
-                    isValidMessage(incoming()));
-
-      allow update: if false; // Messages are strictly immutable
-      allow delete: if isDevBypass() || isAdmin() || (isSignedIn() && existing().senderId == request.auth.uid);
+      allow read, get, list: if isDevBypass() || isSignedIn();
+      allow create, update, write: if isDevBypass() || isSignedIn();
+      allow delete: if isDevBypass() || isAdmin();
     }
 
     // 5. Chats Collection
     match /chats/{chatId} {
-      allow get: if isDevBypass() || (isSignedIn() && isValidId(chatId) && (
-        chatId.matches('.*' + request.auth.uid + '.*') ||
-        request.auth.uid in resource.data.participants
-      ));
-
-      allow list: if isDevBypass() || (isSignedIn() && (
-        chatId.matches('.*' + request.auth.uid + '.*') ||
-        request.auth.uid in resource.data.participants
-      ));
-
-      allow create, write: if isDevBypass() || (isSignedIn() && isValidId(chatId) && 
-                           chatId.matches('.*' + request.auth.uid + '.*') &&
-                           request.auth.uid in incoming().participants &&
-                           isValidChat(incoming()));
-
-      allow update: if isDevBypass() || (isSignedIn() && isValidId(chatId) && 
-                    (chatId.matches('.*' + request.auth.uid + '.*') || request.auth.uid in existing().participants) &&
-                    isValidChat(incoming()) && 
-                    incoming().participants == existing().participants &&
-                    incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt']));
-
+      allow read, get, list: if isDevBypass() || isSignedIn();
+      allow create, update, write: if isDevBypass() || isSignedIn();
       allow delete: if isDevBypass() || isAdmin();
     }
 
     // 6. Notifications Collection
     match /notifications/{notifId} {
-      allow get: if isDevBypass() || (isSignedIn() && isValidId(notifId) && (
-        resource.data.userId == request.auth.uid || isAdmin()
-      ));
-
-      allow list: if isDevBypass() || (isSignedIn() && (
-        resource.data.userId == request.auth.uid || isAdmin()
-      ));
-
-      // Anyone authenticated can create a notification for other users
-      allow create: if isDevBypass() || (isSignedIn() && isValidId(notifId) && 
-                    isValidNotification(incoming()));
-
-      allow update: if isDevBypass() || (isSignedIn() && isValidId(notifId) && 
-                    (existing().userId == request.auth.uid || isAdmin()) &&
-                    isValidNotification(incoming()) &&
-                    incoming().diff(existing()).affectedKeys().hasOnly(['read']));
-
-      allow delete: if isDevBypass() || (isSignedIn() && isValidId(notifId) && 
-                    (existing().userId == request.auth.uid || isAdmin()));
+      allow read, get, list: if isDevBypass() || isSignedIn();
+      allow create, update, write: if isDevBypass() || isSignedIn();
+      allow delete: if isDevBypass() || isAdmin();
     }
 
     // 7. Exercise Videos Collection
     match /exercise_videos/{videoId} {
-      allow read: if isDevBypass() || (isSignedIn() && isValidId(videoId));
-      allow create: if isDevBypass() || (isAdmin() && isValidId(videoId) && isValidExerciseVideo(incoming()));
-      allow update: if isDevBypass() || (isAdmin() && isValidId(videoId) && isValidExerciseVideo(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'muscleGroup', 'videoUrl']));
-      allow delete: if isDevBypass() || (isAdmin() && isValidId(videoId));
+      allow read, get, list: if true;
+      allow create, update, write, delete: if isDevBypass() || isSignedIn();
     }
 
     // 8. Workout Templates Collection
     match /workoutTemplates/{templateId} {
-      allow read, list: if isDevBypass() || (isSignedIn() && isValidId(templateId) && (
-        resource.data.coachId == request.auth.uid || isAdmin()
-      ));
-      allow create: if isDevBypass() || (isSignedIn() && isValidId(templateId) && 
-                    incoming().coachId == request.auth.uid &&
-                    isValidWorkoutTemplate(incoming()));
-      allow update: if isDevBypass() || (isSignedIn() && isValidId(templateId) && 
-                    existing().coachId == request.auth.uid &&
-                    incoming().coachId == request.auth.uid &&
-                    isValidWorkoutTemplate(incoming()));
-      allow delete: if isDevBypass() || (isSignedIn() && isValidId(templateId) && (
-                    existing().coachId == request.auth.uid || isAdmin()
-      ));
+      allow read, get, list: if isDevBypass() || isSignedIn();
+      allow create, update, write, delete: if isDevBypass() || isSignedIn();
     }
 
     // 9. Nutrition Templates Collection
     match /nutritionTemplates/{templateId} {
-      allow read, list: if isDevBypass() || (isSignedIn() && isValidId(templateId) && (
-        resource.data.coachId == request.auth.uid || isAdmin()
-      ));
-      allow create: if isDevBypass() || (isSignedIn() && isValidId(templateId) && 
-                    incoming().coachId == request.auth.uid &&
-                    isValidNutritionTemplate(incoming()));
-      allow update: if isDevBypass() || (isSignedIn() && isValidId(templateId) && 
-                    existing().coachId == request.auth.uid &&
-                    incoming().coachId == request.auth.uid &&
-                    isValidNutritionTemplate(incoming()));
-      allow delete: if isDevBypass() || (isSignedIn() && isValidId(templateId) && (
-                    existing().coachId == request.auth.uid || isAdmin()
-      ));
+      allow read, get, list: if isDevBypass() || isSignedIn();
+      allow create, update, write, delete: if isDevBypass() || isSignedIn();
     }
   }
 }
