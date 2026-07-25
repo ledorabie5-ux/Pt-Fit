@@ -213,7 +213,17 @@ export const translations = {
     videoAddedSuccess: "Exercise video added to library successfully!",
     announcementTitleLabel: "Announcement Title",
     announcementBodyLabel: "Announcement Message (Markdown supported)",
-    activityAndLogsTitle: "User Activity & Progress Log"
+    activityAndLogsTitle: "User Activity & Progress Log",
+    backupRestoreTab: "Backup & Restore",
+    backupRestoreTitle: "Full Website Backup & Disaster Recovery",
+    backupSectionDesc: "Create and download a complete backup of all website data or restore the entire website from a backup file.",
+    createBackupBtn: "Create & Download Backup",
+    uploadBackupBtn: "Upload Backup File",
+    restoreWebsiteDataBtn: "Restore Website Data",
+    restoreWarningTitle: "Confirm Complete Website Restore",
+    restoreWarningMsg: "Warning: Restoring from a backup will overwrite or update existing website data. Are you sure you want to proceed?",
+    restoreSuccessMsg: "Website data has been restored successfully.",
+    missingDataWarning: "Warning: The uploaded backup file is missing some data collections:"
   },
   ar: {
     // General / UI
@@ -427,7 +437,17 @@ export const translations = {
     videoAddedSuccess: "تم إضافة فيديو التمرين إلى المكتبة بنجاح!",
     announcementTitleLabel: "عنوان الإعلان",
     announcementBodyLabel: "رسالة الإعلان (يدعم ماركداون)",
-    activityAndLogsTitle: "سجل نشاط وتقدم المستخدم"
+    activityAndLogsTitle: "سجل نشاط وتقدم المستخدم",
+    backupRestoreTab: "النسخ الاحتياطي والاستعادة",
+    backupRestoreTitle: "النسخ الاحتياطي الكامل واستعادة البيانات",
+    backupSectionDesc: "إنشاء وتنزيل نسخة احتياطية كاملة لجميع بيانات الموقع أو استعادة الموقع بالكامل من ملف نسخة احتياطية.",
+    createBackupBtn: "إنشاء وتنزيل نسخة احتياطية",
+    uploadBackupBtn: "رفع ملف النسخة الاحتياطية",
+    restoreWebsiteDataBtn: "استعادة بيانات الموقع",
+    restoreWarningTitle: "تأكيد استعادة بيانات الموقع بالكامل",
+    restoreWarningMsg: "تحذير: ستؤدي الاستعادة من نسخة احتياطية إلى استبدال أو تحديث بيانات الموقع الحالية. هل أنت تأكد من المتابعة؟",
+    restoreSuccessMsg: "تم استعادة بيانات الموقع بنجاح.",
+    missingDataWarning: "تحذير: ملف النسخة الاحتياطية المرفوع لا يحتوي على بعض مجموعات البيانات التالية:"
   }
 };
 

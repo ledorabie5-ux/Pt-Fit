@@ -1103,3 +1103,396 @@ export async function getLandingStats(): Promise<LandingStats> {
   };
 }
 
+// -------------------------------------------------------------
+// FULL WEBSITE BACKUP & RESTORE SERVICE
+// -------------------------------------------------------------
+
+export interface FullWebsiteBackup {
+  metadata: {
+    system: string;
+    version: string;
+    createdAt: string;
+    totalRecords: number;
+    summary: Record<string, number>;
+  };
+  data: {
+    users: UserDoc[];
+    programs: Program[];
+    nutrition_plans: any[];
+    exercise_videos: ExerciseVideo[];
+    progress_logs: ProgressLog[];
+    notifications: AppNotification[];
+    chat_messages: Message[];
+    workout_templates: WorkoutTemplate[];
+    nutrition_templates: NutritionTemplate[];
+    subscriptions?: any[];
+    payments?: any[];
+  };
+}
+
+export interface BackupValidationResult {
+  isValid: boolean;
+  missingCollections: string[];
+  presentCollections: Record<string, number>;
+  totalRecords: number;
+  errorMessage?: string;
+}
+
+export async function createFullWebsiteBackup(): Promise<FullWebsiteBackup> {
+  const supabase = getSupabaseClient();
+
+  // 1. Fetch Users
+  const users: UserDoc[] = await getAllUsers();
+
+  // Helper to safely select all records from a Supabase table
+  const fetchTable = async (table: string, fallbackArr: any[] = []): Promise<any[]> => {
+    if (!supabase) return fallbackArr;
+    try {
+      const { data, error } = await supabase.from(table).select("*");
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data.map(item => item.data ? { ...item.data, id: item.id || item.uid } : item);
+      }
+    } catch (err) {
+      console.warn(`Error backing up table ${table}:`, err);
+    }
+    return fallbackArr;
+  };
+
+  // 2. Fetch all collections
+  const programs = await fetchTable("programs", Object.values(getLocalProgramsCache()));
+  const nutritionPlans = await fetchTable("nutrition_plans", []);
+  const exerciseVideos = await fetchTable("exercise_videos", await getExerciseVideos());
+  const progressLogs = await fetchTable("progress_logs", recoveredData.progress || []);
+  const notifications = await fetchTable("notifications", recoveredData.notifications || []);
+  const chatMessages = await fetchTable("chat_messages", recoveredData.messages || []);
+  const workoutTemplates = await fetchTable("workout_templates", []);
+  const nutritionTemplates = await fetchTable("nutrition_templates", []);
+
+  // Compute summary & total records
+  const summary: Record<string, number> = {
+    users: users.length,
+    programs: programs.length,
+    nutrition_plans: nutritionPlans.length,
+    exercise_videos: exerciseVideos.length,
+    progress_logs: progressLogs.length,
+    notifications: notifications.length,
+    chat_messages: chatMessages.length,
+    workout_templates: workoutTemplates.length,
+    nutrition_templates: nutritionTemplates.length
+  };
+
+  const totalRecords = Object.values(summary).reduce((a, b) => a + b, 0);
+
+  return {
+    metadata: {
+      system: "PT FIT PORTAL FULL SYSTEM BACKUP",
+      version: "2.0",
+      createdAt: new Date().toISOString(),
+      totalRecords,
+      summary
+    },
+    data: {
+      users,
+      programs,
+      nutrition_plans: nutritionPlans,
+      exercise_videos: exerciseVideos,
+      progress_logs: progressLogs,
+      notifications,
+      chat_messages: chatMessages,
+      workout_templates: workoutTemplates,
+      nutrition_templates: nutritionTemplates
+    }
+  };
+}
+
+export function validateBackupData(backup: any): BackupValidationResult {
+  if (!backup || typeof backup !== "object") {
+    return {
+      isValid: false,
+      missingCollections: [],
+      presentCollections: {},
+      totalRecords: 0,
+      errorMessage: "The file is not a valid JSON object."
+    };
+  }
+
+  const dataObj = backup.data && typeof backup.data === "object" ? backup.data : backup;
+
+  if (!dataObj || (typeof dataObj !== "object")) {
+    return {
+      isValid: false,
+      missingCollections: [],
+      presentCollections: {},
+      totalRecords: 0,
+      errorMessage: "The backup file lacks a valid data structure."
+    };
+  }
+
+  // Must have users at minimum
+  const users = dataObj.users || dataObj.clients;
+  if (!Array.isArray(users)) {
+    return {
+      isValid: false,
+      missingCollections: [],
+      presentCollections: {},
+      totalRecords: 0,
+      errorMessage: "Invalid backup file: 'users' array is missing or corrupted."
+    };
+  }
+
+  const expectedKeys = [
+    { key: "users", label: "Users & Accounts" },
+    { key: "programs", label: "Workout Plans" },
+    { key: "nutrition_plans", label: "Nutrition Plans" },
+    { key: "exercise_videos", label: "Exercise Videos Library" },
+    { key: "progress_logs", label: "Trainee Progress Logs" },
+    { key: "notifications", label: "Notifications & Alerts" },
+    { key: "chat_messages", label: "Chat Messages" },
+    { key: "workout_templates", label: "Workout Templates" },
+    { key: "nutrition_templates", label: "Nutrition Templates" }
+  ];
+
+  const presentCollections: Record<string, number> = {};
+  const missingCollections: string[] = [];
+  let totalRecords = 0;
+
+  for (const item of expectedKeys) {
+    const val = dataObj[item.key];
+    if (Array.isArray(val) && val.length > 0) {
+      presentCollections[item.label] = val.length;
+      totalRecords += val.length;
+    } else {
+      missingCollections.push(item.label);
+    }
+  }
+
+  return {
+    isValid: true,
+    missingCollections,
+    presentCollections,
+    totalRecords,
+  };
+}
+
+export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: boolean; totalRestored: number; details: Record<string, number> }> {
+  const validation = validateBackupData(backup);
+  if (!validation.isValid) {
+    throw new Error(validation.errorMessage || "Invalid backup data.");
+  }
+
+  const supabase = getSupabaseClient();
+  const dataObj = backup.data && typeof backup.data === "object" ? backup.data : backup;
+  const details: Record<string, number> = {};
+  let totalRestored = 0;
+
+  // Helper batch upsert
+  const batchUpsert = async (table: string, records: any[], onConflictKey: string = "id") => {
+    if (!supabase || !records || !Array.isArray(records) || records.length === 0) return 0;
+    const CHUNK_SIZE = 50;
+    let count = 0;
+    for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+      const chunk = records.slice(i, i + CHUNK_SIZE);
+      const { error } = await supabase.from(table).upsert(chunk, { onConflict: onConflictKey });
+      if (error) {
+        console.error(`Error restoring chunk to ${table}:`, error);
+        throw new Error(`Failed to restore table '${table}': ${error.message}`);
+      }
+      count += chunk.length;
+    }
+    return count;
+  };
+
+  // 1. Users
+  const rawUsers = dataObj.users || dataObj.clients || [];
+  if (Array.isArray(rawUsers) && rawUsers.length > 0) {
+    const formattedUsers = rawUsers.map((u: any) => {
+      const userObj: UserDoc = {
+        uid: u.uid || u.id || `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: u.name || "User",
+        email: u.email || "",
+        phone: u.phone || "N/A",
+        role: u.role || "trainee",
+        status: u.status || "approved",
+        coachId: u.coachId || u.coach_id || undefined,
+        coachName: u.coachName || u.coach_name || undefined,
+        subscriptionStatus: u.subscriptionStatus || u.subscription_status || "none",
+        subscriptionStart: u.subscriptionStart || u.subscription_start || undefined,
+        subscriptionExpiry: u.subscriptionExpiry || u.subscription_expiry || undefined,
+        subscriptionDuration: u.subscriptionDuration || u.subscription_duration || undefined,
+        frozenAt: u.frozenAt || u.frozen_at || undefined,
+        createdAt: u.createdAt || u.created_at || new Date().toISOString()
+      };
+      saveUserToLocalCache(userObj);
+      return {
+        uid: userObj.uid,
+        name: userObj.name,
+        email: userObj.email,
+        phone: userObj.phone,
+        role: userObj.role,
+        status: userObj.status,
+        coach_id: userObj.coachId || null,
+        coach_name: userObj.coachName || null,
+        subscription_status: userObj.subscriptionStatus || "none",
+        subscription_start: userObj.subscriptionStart || null,
+        subscription_expiry: userObj.subscriptionExpiry || null,
+        subscription_duration: userObj.subscriptionDuration || null,
+        is_frozen: userObj.subscriptionStatus === "frozen",
+        frozen_at: userObj.frozenAt || null,
+        data: userObj,
+        created_at: userObj.createdAt
+      };
+    });
+
+    const c = await batchUpsert("users", formattedUsers, "uid");
+    details["Users & Accounts"] = c;
+    totalRestored += c;
+  }
+
+  // 2. Programs / Workout Plans
+  const rawPrograms = dataObj.programs || [];
+  if (Array.isArray(rawPrograms) && rawPrograms.length > 0) {
+    const formattedPrograms = rawPrograms.map((p: any) => {
+      const progObj: Program = {
+        id: p.id || p.traineeId || p.trainee_id,
+        traineeId: p.traineeId || p.trainee_id || p.id,
+        coachId: p.coachId || p.coach_id || "",
+        workoutDays: Array.isArray(p.workoutDays) ? p.workoutDays : (p.data?.workoutDays || []),
+        dietMeals: Array.isArray(p.dietMeals) ? p.dietMeals : (p.data?.dietMeals || []),
+        updatedAt: p.updatedAt || p.updated_at || new Date().toISOString()
+      };
+      saveProgramToLocalCache(progObj);
+      return {
+        id: progObj.id,
+        trainee_id: progObj.traineeId,
+        coach_id: progObj.coachId || null,
+        workout_days: progObj.workoutDays,
+        data: progObj,
+        updated_at: progObj.updatedAt
+      };
+    });
+
+    const c = await batchUpsert("programs", formattedPrograms, "id");
+    details["Workout Plans"] = c;
+    totalRestored += c;
+  }
+
+  // 3. Nutrition Plans
+  const rawNutrition = dataObj.nutrition_plans || dataObj.nutritionPlans || [];
+  if (Array.isArray(rawNutrition) && rawNutrition.length > 0) {
+    const formattedNut = rawNutrition.map((n: any) => ({
+      id: n.id || n.traineeId || n.trainee_id,
+      trainee_id: n.traineeId || n.trainee_id || n.id,
+      coach_id: n.coachId || n.coach_id || null,
+      meals: n.meals || n.dietMeals || n.data?.dietMeals || [],
+      data: n.data || n,
+      updated_at: n.updatedAt || n.updated_at || new Date().toISOString()
+    }));
+    const c = await batchUpsert("nutrition_plans", formattedNut, "id");
+    details["Nutrition Plans"] = c;
+    totalRestored += c;
+  }
+
+  // 4. Exercise Videos
+  const rawVideos = dataObj.exercise_videos || dataObj.exerciseVideos || dataObj.videos || [];
+  if (Array.isArray(rawVideos) && rawVideos.length > 0) {
+    const formattedVids = rawVideos.map((v: any) => ({
+      id: v.id || `vid_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      title: v.title || v.name || "Exercise Video",
+      title_ar: v.title_ar || v.titleAr || v.title || "",
+      target_muscle: v.target_muscle || v.targetMuscle || v.group || "Full Body",
+      video_url: v.video_url || v.videoUrl || v.url || "",
+      description: v.description || "",
+      data: v.data || v
+    }));
+    const c = await batchUpsert("exercise_videos", formattedVids, "id");
+    details["Exercise Videos Library"] = c;
+    totalRestored += c;
+  }
+
+  // 5. Progress Logs
+  const rawProgress = dataObj.progress_logs || dataObj.progress || [];
+  if (Array.isArray(rawProgress) && rawProgress.length > 0) {
+    const formattedProg = rawProgress.map((p: any) => ({
+      id: p.id || `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      trainee_id: p.traineeId || p.trainee_id || "",
+      workout_day_name: p.workoutDayName || p.workout_day_name || "",
+      completed_at: p.completedAt || p.completed_at || new Date().toISOString(),
+      notes: p.notes || "",
+      weight: p.weight || null,
+      data: p.data || p
+    }));
+    const c = await batchUpsert("progress_logs", formattedProg, "id");
+    details["Trainee Progress Logs"] = c;
+    totalRestored += c;
+  }
+
+  // 6. Notifications
+  const rawNotifications = dataObj.notifications || [];
+  if (Array.isArray(rawNotifications) && rawNotifications.length > 0) {
+    const formattedNotifs = rawNotifications.map((n: any) => ({
+      id: n.id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      user_id: n.userId || n.user_id || "all",
+      title: n.title || "Announcement",
+      message: n.message || "",
+      read: Boolean(n.read),
+      created_at: n.createdAt || n.created_at || new Date().toISOString(),
+      data: n.data || n
+    }));
+    const c = await batchUpsert("notifications", formattedNotifs, "id");
+    details["Notifications & Alerts"] = c;
+    totalRestored += c;
+  }
+
+  // 7. Chat Messages
+  const rawMessages = dataObj.chat_messages || dataObj.messages || [];
+  if (Array.isArray(rawMessages) && rawMessages.length > 0) {
+    const formattedMsgs = rawMessages.map((m: any) => ({
+      id: m.id || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      sender_id: m.senderId || m.sender_id || "",
+      receiver_id: m.receiverId || m.receiver_id || "",
+      message: m.message || "",
+      read: Boolean(m.read),
+      created_at: m.createdAt || m.created_at || new Date().toISOString(),
+      data: m.data || m
+    }));
+    const c = await batchUpsert("chat_messages", formattedMsgs, "id");
+    details["Chat Messages"] = c;
+    totalRestored += c;
+  }
+
+  // 8. Workout Templates
+  const rawWorkoutTpl = dataObj.workout_templates || dataObj.workoutTemplates || [];
+  if (Array.isArray(rawWorkoutTpl) && rawWorkoutTpl.length > 0) {
+    const formattedWT = rawWorkoutTpl.map((w: any) => ({
+      id: w.id || `wt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      coach_id: w.coachId || w.coach_id || "",
+      title: w.title || w.name || "Workout Template",
+      data: w.data || w
+    }));
+    const c = await batchUpsert("workout_templates", formattedWT, "id");
+    details["Workout Templates"] = c;
+    totalRestored += c;
+  }
+
+  // 9. Nutrition Templates
+  const rawNutTpl = dataObj.nutrition_templates || dataObj.nutritionTemplates || [];
+  if (Array.isArray(rawNutTpl) && rawNutTpl.length > 0) {
+    const formattedNT = rawNutTpl.map((n: any) => ({
+      id: n.id || `nt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      coach_id: n.coachId || n.coach_id || "",
+      title: n.title || n.name || "Nutrition Template",
+      data: n.data || n
+    }));
+    const c = await batchUpsert("nutrition_templates", formattedNT, "id");
+    details["Nutrition Templates"] = c;
+    totalRestored += c;
+  }
+
+  return {
+    success: true,
+    totalRestored,
+    details
+  };
+}
+
+

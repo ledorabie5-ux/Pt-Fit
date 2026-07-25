@@ -5,13 +5,16 @@ import {
   getAllUsers, updateUserStatus, updateSubscription, 
   deleteUserDoc, updateUserDoc, getProgram, updateProgram,
   cancelSubscription, broadcastAnnouncement, getExerciseVideos,
-  addExerciseVideo, deleteExerciseVideo, getTraineeProgress
+  addExerciseVideo, deleteExerciseVideo, getTraineeProgress,
+  createFullWebsiteBackup, validateBackupData, restoreFullWebsiteBackup,
+  BackupValidationResult
 } from "../services/dbService";
 import { 
   Users, UserCheck, Shield, AlertCircle, RefreshCw, 
   Search, CheckCircle2, XCircle, Award, Calendar, Phone, Mail,
   Lock, KeyRound, Dumbbell, Apple, Plus, Trash2, Edit2, Save, Video, ClipboardList, UserX,
-  Megaphone, History, Sparkles, ShieldAlert, Download, Database
+  Megaphone, History, Sparkles, ShieldAlert, Download, Database,
+  Upload, HardDrive, FileText, AlertTriangle, CheckCircle, Server, RefreshCcw, FileCheck
 } from "lucide-react";
 import recoveredDataRaw from "../data/recovered_firebase_data.json";
 import { Language, getTranslation } from "../utils/translations";
@@ -39,7 +42,18 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
   const [error, setError] = useState<string | null>(null);
 
   // Active Management Sub-Tabs
-  const [activeTab, setActiveTab] = useState<"trainees" | "coaches" | "plans" | "videos" | "announcements" | "progress">("trainees");
+  const [activeTab, setActiveTab] = useState<"trainees" | "coaches" | "plans" | "videos" | "announcements" | "progress" | "backup">("trainees");
+
+  // Backup & Restore System States
+  const [creatingBackup, setCreatingBackup] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState(false);
+  const [selectedBackupFile, setSelectedBackupFile] = useState<File | null>(null);
+  const [parsedBackupData, setParsedBackupData] = useState<any | null>(null);
+  const [backupValidation, setBackupValidation] = useState<BackupValidationResult | null>(null);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restoreSuccessMsg, setRestoreSuccessMsg] = useState<string | null>(null);
+  const [restoreErrorMsg, setRestoreErrorMsg] = useState<string | null>(null);
+  const [restoreDetails, setRestoreDetails] = useState<Record<string, number> | null>(null);
 
   // Exercise Videos Library States
   const [exerciseVideos, setExerciseVideos] = useState<ExerciseVideo[]>([]);
@@ -495,6 +509,78 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
     }
   };
 
+  // Full System Backup Creation
+  const handleCreateBackup = async () => {
+    setCreatingBackup(true);
+    try {
+      const backup = await createFullWebsiteBackup();
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
+      const dateStr = new Date().toISOString().split("T")[0];
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `ptfit_full_website_backup_${dateStr}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (err: any) {
+      console.error("Backup creation failed:", err);
+      alert((lang === "ar" ? "فشل إنشاء النسخة الاحتياطية: " : "Backup creation failed: ") + (err.message || err));
+    } finally {
+      setCreatingBackup(false);
+    }
+  };
+
+  // File Select & Validation Handler
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRestoreSuccessMsg(null);
+    setRestoreErrorMsg(null);
+    setRestoreDetails(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedBackupFile(file);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        setParsedBackupData(json);
+        const val = validateBackupData(json);
+        setBackupValidation(val);
+        if (!val.isValid) {
+          setRestoreErrorMsg(val.errorMessage || (lang === "ar" ? "ملف النسخة الاحتياطية غير صالح." : "Invalid backup file structure."));
+        }
+      } catch (err) {
+        console.error("Failed to parse backup JSON file:", err);
+        setParsedBackupData(null);
+        setBackupValidation(null);
+        setRestoreErrorMsg(lang === "ar" ? "ملف النسخة الاحتياطية غير صالح أو تالف (ليس صيغة JSON صحيحة)." : "The selected backup file is not a valid JSON document.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Execute Restore
+  const handleExecuteRestore = async () => {
+    if (!parsedBackupData) return;
+    setRestoringBackup(true);
+    setRestoreSuccessMsg(null);
+    setRestoreErrorMsg(null);
+    setShowRestoreModal(false);
+
+    try {
+      const result = await restoreFullWebsiteBackup(parsedBackupData);
+      setRestoreSuccessMsg(getTranslation(lang, "restoreSuccessMsg"));
+      setRestoreDetails(result.details);
+      await loadUsers();
+      await loadVideos();
+    } catch (err: any) {
+      console.error("Restore failed:", err);
+      setRestoreErrorMsg((lang === "ar" ? "فشلت عملية الاستعادة: " : "Restore failed: ") + (err.message || err));
+    } finally {
+      setRestoringBackup(false);
+    }
+  };
+
   // Fetch progress logs
   const handleSelectProgressTrainee = async (trainee: UserDoc) => {
     setSelectedProgressTrainee(trainee);
@@ -726,6 +812,17 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
         >
           <History className="h-4 w-4" />
           {getTranslation(lang, "userProgressTab")}
+        </button>
+        <button
+          onClick={() => setActiveTab("backup")}
+          className={`px-4 py-3 text-xs font-black tracking-wider uppercase border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === "backup"
+              ? "border-emerald-500 text-emerald-400 bg-emerald-950/10"
+              : "border-transparent text-neutral-400 hover:text-white"
+          }`}
+        >
+          <Database className="h-4 w-4" />
+          {getTranslation(lang, "backupRestoreTab")}
         </button>
       </div>
 
@@ -1543,6 +1640,345 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Full Website Backup & Restore Tab */}
+      {activeTab === "backup" && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {/* Header Card */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 rounded-xl">
+                <Database className="h-6 w-6 stroke-[2]" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white tracking-tight">
+                  {getTranslation(lang, "backupRestoreTitle")}
+                </h3>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  {getTranslation(lang, "backupSectionDesc")}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Success Alert Banner */}
+          {restoreSuccessMsg && (
+            <div className="bg-emerald-950/50 border border-emerald-500/50 rounded-2xl p-5 text-emerald-300 shadow-xl space-y-3 animate-in slide-in-from-top-2">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-6 w-6 text-emerald-400 shrink-0" />
+                <h4 className="text-sm font-black tracking-tight">{restoreSuccessMsg}</h4>
+              </div>
+              {restoreDetails && (
+                <div className="bg-neutral-950/60 rounded-xl p-4 border border-emerald-800/40 text-xs font-mono grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {Object.entries(restoreDetails).map(([key, count]) => (
+                    <div key={key} className="bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
+                      <span className="text-neutral-400 block text-[11px]">{key}</span>
+                      <span className="text-emerald-400 font-bold text-sm">{count} records</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Error Alert Banner */}
+          {restoreErrorMsg && (
+            <div className="bg-rose-950/50 border border-rose-500/50 rounded-2xl p-5 text-rose-300 shadow-xl flex items-start gap-3 animate-in slide-in-from-top-2">
+              <AlertCircle className="h-6 w-6 text-rose-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-bold">{lang === "ar" ? "خطأ في عملية الاستعادة" : "Restore Error"}</h4>
+                <p className="text-xs text-rose-200 mt-1 leading-relaxed">{restoreErrorMsg}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Two Action Cards Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* 1. CREATE BACKUP CARD */}
+            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-6 flex flex-col justify-between">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
+                    <Download className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-md font-bold text-white">
+                      {lang === "ar" ? "تصدير نسخة احتياطية كاملة" : "Create Full System Backup"}
+                    </h4>
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      {lang === "ar" 
+                        ? "إنشاء وتنزيل ملف JSON يحتوي على كافة بيانات الموقع والأنظمة."
+                        : "Download a comprehensive JSON file containing all database collections."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-850 space-y-3">
+                  <span className="text-xs font-mono text-neutral-400 uppercase tracking-wider block font-bold">
+                    {lang === "ar" ? "يتضمن هذا النسخ الاحتياطي:" : "Included Data Collections:"}
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono text-neutral-300">
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      {lang === "ar" ? "حسابات المستخدمين والعملاء" : "Users, Clients & Coaches"}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      {lang === "ar" ? "البرامج والتمارين التدريبية" : "Workout Plans"}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      {lang === "ar" ? "أنظمة التغذية والوجبات" : "Nutrition Plans"}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      {lang === "ar" ? "مكتبة فيديوهات التمارين" : "Exercise Video Library"}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      {lang === "ar" ? "قوالب التمارين والتغذية" : "Exercise & Meal Templates"}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      {lang === "ar" ? "الاشتراكات وسجلات الدفع" : "Subscriptions & Payments"}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      {lang === "ar" ? "المحادثات والرسائل" : "Chat Messages"}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      {lang === "ar" ? "سجلات تقدم المتدربين" : "Progress & Biometric Logs"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleCreateBackup}
+                disabled={creatingBackup}
+                className="w-full py-3.5 px-5 bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-black text-xs rounded-xl shadow-lg hover:shadow-emerald-400/20 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2 mt-4"
+              >
+                {creatingBackup ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    {lang === "ar" ? "جاري إنشاء النسخة الاحتياطية..." : "Creating Backup..."}
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 stroke-[2.5]" />
+                    {getTranslation(lang, "createBackupBtn")}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* 2. UPLOAD BACKUP & RESTORE CARD */}
+            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-6 flex flex-col justify-between">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-lg border border-indigo-500/20">
+                    <Upload className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-md font-bold text-white">
+                      {lang === "ar" ? "استعادة بيانات الموقع من ملف" : "Restore System from Backup File"}
+                    </h4>
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      {lang === "ar"
+                        ? "قم برفع ملف نسخة احتياطية لاستعادة كافة بيانات الموقع والجداول."
+                        : "Upload a valid JSON backup file to restore all website data."}
+                    </p>
+                  </div>
+                </div>
+
+                {/* File Upload Box */}
+                <div className="border-2 border-dashed border-neutral-800 hover:border-emerald-500/50 rounded-xl p-5 text-center transition-all bg-neutral-950/50 space-y-3">
+                  <input
+                    type="file"
+                    accept=".json"
+                    id="backup-file-input"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="backup-file-input"
+                    className="cursor-pointer flex flex-col items-center justify-center space-y-2 py-2"
+                  >
+                    <FileText className="h-8 w-8 text-neutral-500 hover:text-emerald-400 transition-colors" />
+                    <span className="text-xs font-bold text-neutral-300">
+                      {selectedBackupFile
+                        ? selectedBackupFile.name
+                        : (lang === "ar" ? "اضغط هنا لاختيار ملف النسخة الاحتياطية (JSON)" : "Click to choose backup file (.json)")}
+                    </span>
+                    <span className="text-[11px] text-neutral-500">
+                      {selectedBackupFile
+                        ? `${(selectedBackupFile.size / 1024).toFixed(1)} KB`
+                        : (lang === "ar" ? "يدعم ملفات النسخ الاحتياطي الخاصة بالمنصة" : "Supports official PT FIT JSON backup files")}
+                    </span>
+                  </label>
+                </div>
+
+                {/* Validation Info Box */}
+                {backupValidation && (
+                  <div className={`p-4 rounded-xl border space-y-3 text-xs font-mono ${
+                    backupValidation.isValid
+                      ? "bg-emerald-950/30 border-emerald-800/40 text-emerald-300"
+                      : "bg-rose-950/30 border-rose-800/40 text-rose-300"
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold flex items-center gap-1.5">
+                        {backupValidation.isValid ? (
+                          <>
+                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                            {lang === "ar" ? "ملف نسخة احتياطية صالح" : "Valid Backup File"}
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="h-4 w-4 text-rose-400" />
+                            {lang === "ar" ? "ملف غير صالح" : "Invalid Backup File"}
+                          </>
+                        )}
+                      </span>
+                      <span className="text-[11px] font-bold">
+                        {backupValidation.totalRecords} {lang === "ar" ? "سجل" : "total records"}
+                      </span>
+                    </div>
+
+                    {/* Breakdown of present collections */}
+                    {Object.keys(backupValidation.presentCollections).length > 0 && (
+                      <div className="space-y-1 pt-1 border-t border-emerald-800/20">
+                        <span className="text-[11px] text-neutral-400 block">
+                          {lang === "ar" ? "المجموعات المكتشفة في الملف:" : "Detected collections in file:"}
+                        </span>
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-neutral-300">
+                          {Object.entries(backupValidation.presentCollections).map(([label, count]) => (
+                            <div key={label} className="flex justify-between">
+                              <span className="truncate">{label}:</span>
+                              <span className="font-bold text-emerald-400">{count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Missing collections warning inside file inspection */}
+                    {backupValidation.missingCollections.length > 0 && (
+                      <div className="p-2.5 bg-amber-950/40 border border-amber-800/40 rounded-lg text-amber-300 text-[11px] space-y-1 mt-2">
+                        <span className="font-bold flex items-center gap-1">
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                          {getTranslation(lang, "missingDataWarning")}
+                        </span>
+                        <p className="text-[10px] text-amber-200/80">
+                          {backupValidation.missingCollections.join(" • ")}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setShowRestoreModal(true)}
+                disabled={!parsedBackupData || !backupValidation?.isValid || restoringBackup}
+                className={`w-full py-3.5 px-5 font-black text-xs rounded-xl shadow-lg active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2 mt-4 ${
+                  parsedBackupData && backupValidation?.isValid && !restoringBackup
+                    ? "bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/20"
+                    : "bg-neutral-800 text-neutral-500 cursor-not-allowed opacity-60"
+                }`}
+              >
+                {restoringBackup ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    {lang === "ar" ? "جاري استعادة البيانات..." : "Restoring System Data..."}
+                  </>
+                ) : (
+                  <>
+                    <RefreshCcw className="h-4 w-4 stroke-[2.5]" />
+                    {getTranslation(lang, "restoreWebsiteDataBtn")}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restore Confirmation Modal */}
+      {showRestoreModal && backupValidation && (
+        <div className="fixed inset-0 bg-neutral-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 border-b border-neutral-800 pb-4">
+              <div className="p-3 bg-amber-950/60 border border-amber-500/30 text-amber-400 rounded-xl">
+                <AlertTriangle className="h-6 w-6 stroke-[2]" />
+              </div>
+              <div>
+                <h4 className="text-md font-bold text-white">
+                  {getTranslation(lang, "restoreWarningTitle")}
+                </h4>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  {getTranslation(lang, "restoreWarningMsg")}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 bg-neutral-950 p-4 rounded-xl border border-neutral-850 text-xs font-mono">
+              <span className="text-neutral-400 font-bold block uppercase tracking-wider text-[11px]">
+                {lang === "ar" ? "ملخص البيانات التي سيتم استعادتها:" : "Summary of data to restore:"}
+              </span>
+
+              <div className="grid grid-cols-2 gap-2 text-neutral-300">
+                {Object.entries(backupValidation.presentCollections).map(([label, count]) => (
+                  <div key={label} className="p-2 bg-neutral-900 rounded border border-neutral-800 flex justify-between">
+                    <span className="truncate">{label}</span>
+                    <span className="font-bold text-emerald-400">{count}</span>
+                  </div>
+                ))}
+              </div>
+
+              {backupValidation.missingCollections.length > 0 && (
+                <div className="mt-3 p-3 bg-amber-950/40 border border-amber-800/40 rounded-lg text-amber-300 text-[11px] space-y-1">
+                  <span className="font-bold block text-amber-400">
+                    {lang === "ar" ? "تنبيه: البيانات التالية غير متوفرة في الملف ولن تتغير:" : "Notice: The following collections are missing in file and will remain as-is:"}
+                  </span>
+                  <span className="text-amber-200/90 font-sans block">
+                    {backupValidation.missingCollections.join(", ")}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRestoreModal(false)}
+                className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                {getTranslation(lang, "cancel")}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExecuteRestore}
+                disabled={restoringBackup}
+                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs rounded-xl shadow-lg hover:shadow-amber-500/20 active:scale-95 transition-all cursor-pointer flex items-center gap-2"
+              >
+                {restoringBackup ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    {lang === "ar" ? "جاري الاستعادة..." : "Restoring..."}
+                  </>
+                ) : (
+                  <>
+                    <RefreshCcw className="h-4 w-4 stroke-[2.5]" />
+                    {lang === "ar" ? "نعم، ابدأ استعادة جميع البيانات" : "Yes, Restore All Data"}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
