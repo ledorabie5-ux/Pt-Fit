@@ -1,4 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { db } from './firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 // Environment variables or localStorage fallbacks
 export function getSupabaseCredentials(): { url: string; anonKey: string } {
@@ -33,7 +35,33 @@ export function setSupabaseCredentials(url: string, anonKey: string): void {
   localStorage.setItem('VITE_SUPABASE_ANON_KEY', cleanKey);
   localStorage.setItem('supabase_url', cleanUrl);
   localStorage.setItem('supabase_anon_key', cleanKey);
+  (window as any).__SUPABASE_URL__ = cleanUrl;
+  (window as any).__SUPABASE_ANON_KEY__ = cleanKey;
   supabaseInstance = null; // reset instance so next getSupabaseClient() creates a fresh client
+
+  if (cleanUrl && cleanKey && db) {
+    setDoc(doc(db, "config", "supabase"), { url: cleanUrl, anonKey: cleanKey, updatedAt: new Date().toISOString() }, { merge: true }).catch(err => {
+      console.warn("Failed to save Supabase config to Firestore:", err);
+    });
+  }
+}
+
+export async function syncSupabaseFromFirestore(): Promise<void> {
+  try {
+    if (!db) return;
+    const snap = await getDoc(doc(db, "config", "supabase"));
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data && data.url && data.anonKey) {
+        const { url: currentUrl, anonKey: currentKey } = getSupabaseCredentials();
+        if (!currentUrl || !currentKey || currentUrl !== data.url || currentKey !== data.anonKey) {
+          setSupabaseCredentials(data.url, data.anonKey);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Error syncing Supabase credentials from Firestore:", err);
+  }
 }
 
 export function clearSupabaseCredentials(): void {
