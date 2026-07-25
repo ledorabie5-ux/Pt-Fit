@@ -227,25 +227,45 @@ export async function updateUserDoc(user: UserDoc): Promise<void> {
 }
 
 export async function getAllUsers(): Promise<UserDoc[]> {
+  const usersMap = new Map<string, UserDoc>();
+
+  // 1. Recovered production dataset
+  if (Array.isArray(recoveredData.users)) {
+    for (const u of recoveredData.users) {
+      if (u.uid) usersMap.set(u.uid, u);
+    }
+  }
+
+  // 2. Local cache
+  const cached = getLocalUsersCache();
+  for (const u of cached) {
+    if (u.uid) {
+      const existing = usersMap.get(u.uid);
+      usersMap.set(u.uid, existing ? { ...existing, ...u } : u);
+    }
+  }
+
+  // 3. Supabase live records
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("*");
-
+      const { data, error } = await supabase.from("users").select("*");
       if (!error && data && Array.isArray(data)) {
-        const usersList: UserDoc[] = data.map(item => item.data ? { ...item.data, uid: item.uid } : (item as unknown as UserDoc));
-        usersList.forEach(u => saveUserToLocalCache(u));
-        return usersList;
+        for (const item of data) {
+          const userObj: UserDoc = item.data ? { ...item.data, uid: item.uid } : (item as unknown as UserDoc);
+          if (userObj.uid) {
+            const existing = usersMap.get(userObj.uid);
+            usersMap.set(userObj.uid, existing ? { ...existing, ...userObj } : userObj);
+            saveUserToLocalCache(userObj);
+          }
+        }
       }
     } catch (err) {
       console.warn("Error fetching all users from Supabase:", err);
     }
   }
 
-  // Fallback to local cache if available, but NEVER create fake users
-  return getLocalUsersCache();
+  return Array.from(usersMap.values());
 }
 
 export async function getAllCoaches(): Promise<UserDoc[]> {
@@ -1138,47 +1158,280 @@ export interface BackupValidationResult {
   errorMessage?: string;
 }
 
-export async function createFullWebsiteBackup(): Promise<FullWebsiteBackup> {
+export async function getMergedLocalAndCloudData(): Promise<{
+  users: UserDoc[];
+  programs: Program[];
+  nutritionPlans: any[];
+  exerciseVideos: ExerciseVideo[];
+  progressLogs: ProgressLog[];
+  notifications: AppNotification[];
+  chatMessages: Message[];
+  workoutTemplates: WorkoutTemplate[];
+  nutritionTemplates: NutritionTemplate[];
+}> {
   const supabase = getSupabaseClient();
 
-  // 1. Fetch Users
-  const users: UserDoc[] = await getAllUsers();
+  // --- 1. USERS ---
+  const usersMap = new Map<string, UserDoc>();
 
-  // Helper to safely select all records from a Supabase table
-  const fetchTable = async (table: string, fallbackArr: any[] = []): Promise<any[]> => {
-    if (!supabase) return fallbackArr;
-    try {
-      const { data, error } = await supabase.from(table).select("*");
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data.map(item => item.data ? { ...item.data, id: item.id || item.uid } : item);
-      }
-    } catch (err) {
-      console.warn(`Error backing up table ${table}:`, err);
+  // A. From recovered_firebase_data.json (Production dataset)
+  if (Array.isArray(recoveredData.users)) {
+    for (const u of recoveredData.users) {
+      const uid = u.uid || (u as any).id;
+      if (uid) usersMap.set(uid, u);
     }
-    return fallbackArr;
+  }
+
+  // B. From local storage cache
+  const localUsersCache = getLocalUsersCache();
+  for (const u of localUsersCache) {
+    if (u.uid) {
+      const existing = usersMap.get(u.uid);
+      usersMap.set(u.uid, existing ? { ...existing, ...u } : u);
+    }
+  }
+
+  // C. Scan all localStorage keys for extra stored user arrays
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.includes("user") || key.includes("client") || key.includes("backup"))) {
+        try {
+          const val = JSON.parse(localStorage.getItem(key) || "");
+          const arr = Array.isArray(val) ? val : (val.users || val.clients || []);
+          if (Array.isArray(arr)) {
+            for (const u of arr) {
+              if (u && typeof u === "object" && (u.uid || u.id)) {
+                const uid = u.uid || u.id;
+                const existing = usersMap.get(uid);
+                usersMap.set(uid, existing ? { ...existing, ...u } : u);
+              }
+            }
+          }
+        } catch (e) { /* ignore non-JSON */ }
+      }
+    }
+  } catch (e) {}
+
+  // D. From Supabase users table (if connected)
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("users").select("*");
+      if (!error && Array.isArray(data)) {
+        for (const item of data) {
+          const uObj: UserDoc = item.data ? { ...item.data, uid: item.uid } : (item as unknown as UserDoc);
+          if (uObj.uid) {
+            const existing = usersMap.get(uObj.uid);
+            usersMap.set(uObj.uid, existing ? { ...existing, ...uObj } : uObj);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not query Supabase users during merge:", e);
+    }
+  }
+
+  const allUsers = Array.from(usersMap.values());
+
+  // --- 2. PROGRAMS ---
+  const programsMap = new Map<string, Program>();
+
+  // A. From recoveredData.programs
+  if (Array.isArray(recoveredData.programs)) {
+    for (const p of recoveredData.programs) {
+      const id = p.id || p.traineeId;
+      if (id) programsMap.set(id, p);
+    }
+  }
+
+  // B. From local cache
+  const localProgCache = getLocalProgramsCache();
+  for (const [key, prog] of Object.entries(localProgCache)) {
+    if (prog && (prog.id || prog.traineeId)) {
+      const id = prog.id || prog.traineeId;
+      const existing = programsMap.get(id);
+      programsMap.set(id, existing ? { ...existing, ...prog } : prog);
+    }
+  }
+
+  // C. From Supabase programs table
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("programs").select("*");
+      if (!error && Array.isArray(data)) {
+        for (const item of data) {
+          const pObj: Program = item.data ? { ...item.data, id: item.id } : (item as unknown as Program);
+          const id = pObj.id || pObj.traineeId;
+          if (id) {
+            const existing = programsMap.get(id);
+            programsMap.set(id, existing ? { ...existing, ...pObj } : pObj);
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  const allPrograms = Array.from(programsMap.values());
+
+  // --- 3. NUTRITION PLANS ---
+  const nutMap = new Map<string, any>();
+  if (Array.isArray((recoveredData as any).nutrition_plans || (recoveredData as any).nutritionPlans)) {
+    const list = (recoveredData as any).nutrition_plans || (recoveredData as any).nutritionPlans;
+    for (const n of list) {
+      const id = n.id || n.traineeId;
+      if (id) nutMap.set(id, n);
+    }
+  }
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("nutrition_plans").select("*");
+      if (!error && Array.isArray(data)) {
+        for (const item of data) {
+          const nObj = item.data ? { ...item.data, id: item.id } : item;
+          if (nObj.id) nutMap.set(nObj.id, nObj);
+        }
+      }
+    } catch (e) {}
+  }
+  const allNutrition = Array.from(nutMap.values());
+
+  // --- 4. EXERCISE VIDEOS ---
+  const videoMap = new Map<string, ExerciseVideo>();
+  try {
+    const defaultVids = await getExerciseVideos();
+    for (const v of defaultVids) {
+      if (v.id) videoMap.set(v.id, v);
+    }
+  } catch (e) {}
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("exercise_videos").select("*");
+      if (!error && Array.isArray(data)) {
+        for (const item of data) {
+          const vObj: ExerciseVideo = item.data ? { ...item.data, id: item.id } : (item as unknown as ExerciseVideo);
+          if (vObj.id) videoMap.set(vObj.id, vObj);
+        }
+      }
+    } catch (e) {}
+  }
+  const allVideos = Array.from(videoMap.values());
+
+  // --- 5. PROGRESS LOGS ---
+  const progressMap = new Map<string, ProgressLog>();
+  if (Array.isArray(recoveredData.progress)) {
+    for (const p of recoveredData.progress) {
+      if (p.id) progressMap.set(p.id, p);
+    }
+  }
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("progress_logs").select("*");
+      if (!error && Array.isArray(data)) {
+        for (const item of data) {
+          const pObj: ProgressLog = item.data ? { ...item.data, id: item.id } : (item as unknown as ProgressLog);
+          if (pObj.id) progressMap.set(pObj.id, pObj);
+        }
+      }
+    } catch (e) {}
+  }
+  const allProgress = Array.from(progressMap.values());
+
+  // --- 6. NOTIFICATIONS ---
+  const notifMap = new Map<string, AppNotification>();
+  if (Array.isArray(recoveredData.notifications)) {
+    for (const n of recoveredData.notifications) {
+      if (n.id) notifMap.set(n.id, n);
+    }
+  }
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("notifications").select("*");
+      if (!error && Array.isArray(data)) {
+        for (const item of data) {
+          const nObj: AppNotification = item.data ? { ...item.data, id: item.id } : (item as unknown as AppNotification);
+          if (nObj.id) notifMap.set(nObj.id, nObj);
+        }
+      }
+    } catch (e) {}
+  }
+  const allNotifs = Array.from(notifMap.values());
+
+  // --- 7. CHAT MESSAGES ---
+  const msgMap = new Map<string, Message>();
+  if (Array.isArray(recoveredData.messages)) {
+    for (const m of recoveredData.messages) {
+      if (m.id) msgMap.set(m.id, m);
+    }
+  }
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("chat_messages").select("*");
+      if (!error && Array.isArray(data)) {
+        for (const item of data) {
+          const mObj: Message = item.data ? { ...item.data, id: item.id } : (item as unknown as Message);
+          if (mObj.id) msgMap.set(mObj.id, mObj);
+        }
+      }
+    } catch (e) {}
+  }
+  const allMessages = Array.from(msgMap.values());
+
+  // --- 8. WORKOUT TEMPLATES ---
+  const wtMap = new Map<string, WorkoutTemplate>();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("workout_templates").select("*");
+      if (!error && Array.isArray(data)) {
+        for (const item of data) {
+          const wObj: WorkoutTemplate = item.data ? { ...item.data, id: item.id } : (item as unknown as WorkoutTemplate);
+          if (wObj.id) wtMap.set(wObj.id, wObj);
+        }
+      }
+    } catch (e) {}
+  }
+  const allWT = Array.from(wtMap.values());
+
+  // --- 9. NUTRITION TEMPLATES ---
+  const ntMap = new Map<string, NutritionTemplate>();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("nutrition_templates").select("*");
+      if (!error && Array.isArray(data)) {
+        for (const item of data) {
+          const nObj: NutritionTemplate = item.data ? { ...item.data, id: item.id } : (item as unknown as NutritionTemplate);
+          if (nObj.id) ntMap.set(nObj.id, nObj);
+        }
+      }
+    } catch (e) {}
+  }
+  const allNT = Array.from(ntMap.values());
+
+  return {
+    users: allUsers,
+    programs: allPrograms,
+    nutritionPlans: allNutrition,
+    exerciseVideos: allVideos,
+    progressLogs: allProgress,
+    notifications: allNotifs,
+    chatMessages: allMessages,
+    workoutTemplates: allWT,
+    nutritionTemplates: allNT
   };
+}
 
-  // 2. Fetch all collections
-  const programs = await fetchTable("programs", Object.values(getLocalProgramsCache()));
-  const nutritionPlans = await fetchTable("nutrition_plans", []);
-  const exerciseVideos = await fetchTable("exercise_videos", await getExerciseVideos());
-  const progressLogs = await fetchTable("progress_logs", recoveredData.progress || []);
-  const notifications = await fetchTable("notifications", recoveredData.notifications || []);
-  const chatMessages = await fetchTable("chat_messages", recoveredData.messages || []);
-  const workoutTemplates = await fetchTable("workout_templates", []);
-  const nutritionTemplates = await fetchTable("nutrition_templates", []);
+export async function createFullWebsiteBackup(): Promise<FullWebsiteBackup> {
+  const merged = await getMergedLocalAndCloudData();
 
-  // Compute summary & total records
   const summary: Record<string, number> = {
-    users: users.length,
-    programs: programs.length,
-    nutrition_plans: nutritionPlans.length,
-    exercise_videos: exerciseVideos.length,
-    progress_logs: progressLogs.length,
-    notifications: notifications.length,
-    chat_messages: chatMessages.length,
-    workout_templates: workoutTemplates.length,
-    nutrition_templates: nutritionTemplates.length
+    users: merged.users.length,
+    programs: merged.programs.length,
+    nutrition_plans: merged.nutritionPlans.length,
+    exercise_videos: merged.exerciseVideos.length,
+    progress_logs: merged.progressLogs.length,
+    notifications: merged.notifications.length,
+    chat_messages: merged.chatMessages.length,
+    workout_templates: merged.workoutTemplates.length,
+    nutrition_templates: merged.nutritionTemplates.length
   };
 
   const totalRecords = Object.values(summary).reduce((a, b) => a + b, 0);
@@ -1192,15 +1445,15 @@ export async function createFullWebsiteBackup(): Promise<FullWebsiteBackup> {
       summary
     },
     data: {
-      users,
-      programs,
-      nutrition_plans: nutritionPlans,
-      exercise_videos: exerciseVideos,
-      progress_logs: progressLogs,
-      notifications,
-      chat_messages: chatMessages,
-      workout_templates: workoutTemplates,
-      nutrition_templates: nutritionTemplates
+      users: merged.users,
+      programs: merged.programs,
+      nutrition_plans: merged.nutritionPlans,
+      exercise_videos: merged.exerciseVideos,
+      progress_logs: merged.progressLogs,
+      notifications: merged.notifications,
+      chat_messages: merged.chatMessages,
+      workout_templates: merged.workoutTemplates,
+      nutrition_templates: merged.nutritionTemplates
     }
   };
 }
