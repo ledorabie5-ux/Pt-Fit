@@ -81,7 +81,7 @@ interface ClientManagementTabProps {
   setNewMeal: (meal: any) => void;
   handleAddMeal: () => void;
   handleDeleteMeal: (mealId: string) => void;
-  handleSaveProgram: () => Promise<void>;
+  handleSaveProgram: (customMeals?: DietMeal[], messageOverride?: string) => Promise<void>;
   loadingProgram: boolean;
 
   // Progress
@@ -101,6 +101,7 @@ interface ClientManagementTabProps {
 }
 
 export default function ClientManagementTab({
+  lang = "ar",
   myTrainees,
   selectedTrainee,
   setSelectedTrainee,
@@ -688,11 +689,11 @@ export default function ClientManagementTab({
 
                   <div className="pt-4 border-t border-neutral-800 flex justify-end">
                     <button
-                      onClick={handleSaveProgram}
+                      onClick={() => handleSaveProgram(undefined, lang === "ar" ? "تم حفظ جدول التمرين بنجاح!" : "Workout saved successfully.")}
                       disabled={loadingProgram}
                       className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-neutral-950 font-bold font-sans text-xs px-5 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-md cursor-pointer"
                     >
-                      <Save className="h-4 w-4" /> {loadingProgram ? "Saving..." : "Save Workout Program"}
+                      <Save className="h-4 w-4" /> {loadingProgram ? "Saving..." : (lang === "ar" ? "حفظ جدول التمرين" : "Save Workout Program")}
                     </button>
                   </div>
                 </div>
@@ -830,11 +831,11 @@ export default function ClientManagementTab({
 
                   <div className="pt-4 border-t border-neutral-800 flex justify-end">
                     <button
-                      onClick={handleSaveProgram}
+                      onClick={() => handleSaveProgram(undefined, lang === "ar" ? "تم حفظ نظام التغذية بنجاح!" : "Nutrition plan saved successfully.")}
                       disabled={loadingProgram}
                       className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-neutral-950 font-bold font-sans text-xs px-5 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-md cursor-pointer"
                     >
-                      <Save className="h-4 w-4" /> {loadingProgram ? "Saving..." : "Save Nutrition Plan"}
+                      <Save className="h-4 w-4" /> {loadingProgram ? "Saving..." : (lang === "ar" ? "حفظ نظام التغذية" : "Save Nutrition Plan")}
                     </button>
                   </div>
                 </div>
@@ -846,12 +847,12 @@ export default function ClientManagementTab({
                     initialAge={selectedTrainee?.age || 25}
                     initialGender={(selectedTrainee?.gender === "Female" || selectedTrainee?.gender === "female") ? "female" : "male"}
                     initialGoal={selectedTrainee?.fitnessGoal || "Muscle Gain"}
-                    lang="ar"
+                    lang={lang}
                     isSaving={loadingProgram}
                     onSavePlanToProgram={async (newMeals) => {
                       if (setDietMeals) setDietMeals(newMeals);
+                      await handleSaveProgram(newMeals, lang === "ar" ? "تم حفظ نظام التغذية بالذكاء الاصطناعي بنجاح!" : "Nutrition plan saved successfully.");
                       setCoachDietMode("manual");
-                      alert("AI Sports Nutrition Plan applied to trainee program! Click 'Save Nutrition Plan' to confirm.");
                     }}
                   />
                 )}

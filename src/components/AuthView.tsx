@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../firebase";
-import { createUserDoc, getUser, getLandingStats, LandingStats, getUserByPhone } from "../services/dbService";
+import { getSupabaseClient } from "../lib/supabase";
+import { createUserDoc, getUser, getStats, getUserByPhone, getLandingStats, LandingStats } from "../services/dbService";
 import { UserDoc, UserRole } from "../types";
 import { Dumbbell, Mail, Lock, User, Phone, Eye, EyeOff, Sparkles, ShieldCheck, Users, Activity, Video } from "lucide-react";
 import { Language, getTranslation } from "../utils/translations";
@@ -76,6 +75,29 @@ export default function AuthView({
       }
     }
     loadStats();
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const channel = supabase
+        .channel("landing_stats_realtime")
+        .on("postgres_changes", { event: "*", schema: "public", table: "users" }, () => {
+          loadStats();
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "exercise_videos" }, () => {
+          loadStats();
+        })
+        .subscribe();
+
+      const interval = setInterval(loadStats, 10000);
+
+      return () => {
+        supabase.removeChannel(channel);
+        clearInterval(interval);
+      };
+    } else {
+      const interval = setInterval(loadStats, 10000);
+      return () => clearInterval(interval);
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,25 +106,31 @@ export default function AuthView({
     setLoading(true);
 
     try {
+      const supabase = getSupabaseClient();
+
       if (isAdminLogin) {
-        // Secure Admin login (In-app credentials as requested)
+        // Secure Admin login
         if (adminUsername.trim() === "Ramadan" && password === "Ro8995") {
           sessionStorage.setItem("admin_authenticated", "true");
           
-          let authUid = "demo_admin_uid";
-          try {
-            const cred = await signInWithEmailAndPassword(auth, "admin@ptfit.com", "Ro8995");
-            authUid = cred.user.uid;
-          } catch (err: any) {
-            if (err.code === "auth/user-not-found" || err.message?.includes("not-found") || err.code === "auth/invalid-credential") {
-              try {
-                const cred = await createUserWithEmailAndPassword(auth, "admin@ptfit.com", "Ro8995");
-                authUid = cred.user.uid;
-              } catch (createErr) {
-                console.warn("Failed to register admin user in Firebase Auth:", createErr);
+          let authUid = "admin_ramadan_uid";
+          if (supabase) {
+            try {
+              const { data, error } = await supabase.auth.signInWithPassword({
+                email: "admin@ptfit.com",
+                password: "Ro8995"
+              });
+              if (error) {
+                const { data: signUpData } = await supabase.auth.signUp({
+                  email: "admin@ptfit.com",
+                  password: "Ro8995"
+                });
+                if (signUpData?.user) authUid = signUpData.user.id;
+              } else if (data?.user) {
+                authUid = data.user.id;
               }
-            } else {
-              console.warn("Failed to sign in admin in Firebase Auth:", err);
+            } catch (err) {
+              console.warn("Supabase auth for admin failed, using default admin uid:", err);
             }
           }
 
@@ -110,18 +138,14 @@ export default function AuthView({
             uid: authUid,
             name: "Ramadan",
             email: "admin@ptfit.com",
-            phone: "N/A",
+            phone: "01150000000",
             role: "admin",
             status: "approved",
             createdAt: new Date().toISOString()
           };
-          // Persist admin document
-          try {
-            await createUserDoc(adminDoc);
-            localStorage.setItem("pt_fit_uid", authUid);
-          } catch (dbErr) {
-            console.warn("Could not write admin profile but logging in", dbErr);
-          }
+
+          await createUserDoc(adminDoc);
+          localStorage.setItem("pt_fit_uid", authUid);
           onAuthSuccess(adminDoc);
         } else {
           setError(getTranslation(lang, "invalidAdminCreds"));
@@ -142,55 +166,28 @@ export default function AuthView({
         const syntheticEmail = `${cleanPhone}@ptfit.com`;
 
         try {
-          // 1. Try to sign in via standard Firebase Auth first (for maximum rule compatibility)
-          try {
-            const userCredential = await signInWithEmailAndPassword(auth, syntheticEmail, password);
-            const firebaseUserDoc = await getUser(userCredential.user.uid);
-            if (firebaseUserDoc) {
-              localStorage.setItem("pt_fit_uid", firebaseUserDoc.uid);
-              onAuthSuccess(firebaseUserDoc);
-              setLoading(false);
-              return;
+          // 1. Try Supabase Auth first
+          if (supabase) {
+            const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+              email: syntheticEmail,
+              password
+            });
+
+            if (!signInErr && signInData?.user) {
+              const uDoc = await getUser(signInData.user.id);
+              if (uDoc) {
+                localStorage.setItem("pt_fit_uid", uDoc.uid);
+                onAuthSuccess(uDoc);
+                setLoading(false);
+                return;
+              }
             }
-          } catch (signInErr: any) {
-            console.warn("Firebase Auth sign-in failed, checking Firestore directly...", signInErr);
           }
 
-          // 2. Fallback: Check Firestore directly (to support existing custom UIDs / Firestore-only entries)
+          // 2. Check Supabase DB directly by phone
           const userDoc = await getUserByPhone(cleanPhone);
           if (userDoc) {
             if (userDoc.password && userDoc.password === password) {
-              // We found the user and the password matches!
-              // Since they exist in Firestore but not in Firebase Auth (or with a different UID), let's create a Firebase Auth user
-              try {
-                const userCredential = await createUserWithEmailAndPassword(auth, syntheticEmail, password);
-                // Update Firestore user document to use this new valid Auth UID so they have full permission!
-                const updatedDoc = { ...userDoc, uid: userCredential.user.uid };
-                await createUserDoc(updatedDoc);
-                localStorage.setItem("pt_fit_uid", userCredential.user.uid);
-                onAuthSuccess(updatedDoc);
-                setLoading(false);
-                return;
-              } catch (createErr: any) {
-                // If Auth user already exists but signIn failed, try one more sign-in attempt
-                console.warn("Failed to create user in Firebase Auth:", createErr);
-                if (createErr.code === "auth/email-already-in-use") {
-                  try {
-                    const userCredential = await signInWithEmailAndPassword(auth, syntheticEmail, password);
-                    const firebaseUserDoc = await getUser(userCredential.user.uid);
-                    if (firebaseUserDoc) {
-                      localStorage.setItem("pt_fit_uid", firebaseUserDoc.uid);
-                      onAuthSuccess(firebaseUserDoc);
-                      setLoading(false);
-                      return;
-                    }
-                  } catch (reSignInErr) {
-                    console.warn("Re-sign-in after email already in use failed:", reSignInErr);
-                  }
-                }
-              }
-
-              // Absolute fallback: log in directly
               localStorage.setItem("pt_fit_uid", userDoc.uid);
               onAuthSuccess(userDoc);
               setLoading(false);
@@ -198,7 +195,6 @@ export default function AuthView({
             }
           }
 
-          // If we reach here, neither Auth nor direct Firestore matched
           setError(lang === "ar" ? "رقم الهاتف أو كلمة المرور غير صحيحة." : "Invalid phone number or password.");
         } catch (err: any) {
           console.error("Auth error:", err);
@@ -215,7 +211,7 @@ export default function AuthView({
         const cleanPhone = phone.trim().replace(/[\s\(\)\-\[\]]/g, "");
         const syntheticEmail = `${cleanPhone}@ptfit.com`;
 
-        // Check if phone number is already registered in Firestore
+        // Check if phone number is already registered in Supabase
         const existingDoc = await getUserByPhone(cleanPhone);
         if (existingDoc) {
           setError(lang === "ar" ? "رقم الهاتف هذا مسجل بالفعل." : "This phone number is already registered.");
@@ -224,28 +220,20 @@ export default function AuthView({
         }
 
         try {
-          // Try to register via Firebase Authentication
-          const userCredential = await createUserWithEmailAndPassword(auth, syntheticEmail, password);
+          let newUid = `user_${cleanPhone}_${Math.random().toString(36).substring(2, 9)}`;
+
+          if (supabase) {
+            const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+              email: syntheticEmail,
+              password
+            });
+            if (!signUpErr && signUpData?.user) {
+              newUid = signUpData.user.id;
+            }
+          }
+
           const newUser: UserDoc = {
-            uid: userCredential.user.uid,
-            name: name.trim(),
-            email: syntheticEmail,
-            phone: cleanPhone,
-            role: "pending_choice" as any, // Post-registration role choice
-            status: "pending", // Accounts start as pending approval
-            createdAt: new Date().toISOString(),
-            password: password // Keep for direct fallback verification
-          };
-          await createUserDoc(newUser);
-          localStorage.setItem("pt_fit_uid", newUser.uid);
-          onAuthSuccess(newUser);
-        } catch (authErr: any) {
-          console.warn("Firebase Auth signup failed or not allowed, falling back to direct Firestore-only registration...", authErr);
-          
-          // Fall back to direct Firestore-only registration (perfect for auth/operation-not-allowed)
-          const customUid = `phone_${cleanPhone}_${Math.random().toString(36).substring(2, 11)}`;
-          const newUser: UserDoc = {
-            uid: customUid,
+            uid: newUid,
             name: name.trim(),
             email: syntheticEmail,
             phone: cleanPhone,
@@ -254,10 +242,13 @@ export default function AuthView({
             createdAt: new Date().toISOString(),
             password: password
           };
-          
+
           await createUserDoc(newUser);
           localStorage.setItem("pt_fit_uid", newUser.uid);
           onAuthSuccess(newUser);
+        } catch (authErr: any) {
+          console.warn("Registration error:", authErr);
+          setError(authErr.message || "Registration failed.");
         }
       }
     } catch (err: any) {
@@ -266,6 +257,7 @@ export default function AuthView({
     } finally {
       setLoading(false);
     }
+
   };
 
   return (

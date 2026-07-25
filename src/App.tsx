@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { UserDoc } from "./types";
 import { getUser } from "./services/dbService";
-import { auth } from "./firebase";
+import { getSupabaseClient } from "./lib/supabase";
 import AuthView from "./components/AuthView";
 import AdminDashboard from "./components/AdminDashboard";
 import CoachDashboard from "./components/CoachDashboard";
@@ -28,7 +28,7 @@ export default function App() {
 
   useEffect(() => {
     async function initializeUser() {
-      // 1. Check local storage first for maximum robustness (supports direct & auth accounts)
+      // 1. Check local storage first for maximum responsiveness
       const savedUid = localStorage.getItem("pt_fit_uid");
       if (savedUid) {
         try {
@@ -43,40 +43,45 @@ export default function App() {
         }
       }
 
-      // 2. Otherwise listen to Firebase Auth changes
-      const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-        if (firebaseUser) {
-          const uDoc = await getUser(firebaseUser.uid);
-          if (uDoc) {
-            setCurrentUser(uDoc);
-            localStorage.setItem("pt_fit_uid", firebaseUser.uid);
+      // 2. Supabase Auth listener
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (session?.user) {
+            const uDoc = await getUser(session.user.id);
+            if (uDoc) {
+              setCurrentUser(uDoc);
+              localStorage.setItem("pt_fit_uid", session.user.id);
+            }
           }
-        }
+          setInitializing(false);
+        });
+
+        return () => {
+          subscription.unsubscribe();
+        };
+      } else {
         setInitializing(false);
-      });
-      return unsubscribe;
+      }
     }
 
-    let unsub: (() => void) | undefined;
-    initializeUser().then(u => {
-      if (typeof u === "function") unsub = u;
-    });
-
-    return () => {
-      if (unsub) unsub();
-    };
+    initializeUser();
   }, []);
 
   const handleLogout = async () => {
-    try {
-      await auth.signOut();
-    } catch {
-      // ignore
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // ignore
+      }
     }
     localStorage.removeItem("pt_fit_uid");
     sessionStorage.removeItem("admin_authenticated");
     setCurrentUser(null);
   };
+
 
   const handleAdminGearClick = () => {
     if (currentUser) {

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../firebase";
+import { getSupabaseClient } from "../lib/supabase";
 import { UserDoc, UserRole, UserStatus, Program, WorkoutDay, DietMeal, Exercise, ExerciseVideo, ProgressLog } from "../types";
 import { 
   getAllUsers, updateUserStatus, updateSubscription, 
@@ -12,8 +11,9 @@ import {
   Users, UserCheck, Shield, AlertCircle, RefreshCw, 
   Search, CheckCircle2, XCircle, Award, Calendar, Phone, Mail,
   Lock, KeyRound, Dumbbell, Apple, Plus, Trash2, Edit2, Save, Video, ClipboardList, UserX,
-  Megaphone, History, Sparkles, ShieldAlert
+  Megaphone, History, Sparkles, ShieldAlert, Download, Database
 } from "lucide-react";
+import recoveredDataRaw from "../data/recovered_firebase_data.json";
 import { Language, getTranslation } from "../utils/translations";
 
 interface AdminDashboardProps {
@@ -100,17 +100,21 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
     e.preventDefault();
     setLoginError(null);
     if (adminUsername.trim() === "Ramadan" && adminPassword === "Ro8995") {
-      try {
-        await signInWithEmailAndPassword(auth, "admin@ptfit.com", "Ro8995");
-      } catch (err: any) {
-        if (err.code === "auth/user-not-found" || err.message?.includes("not-found") || err.code === "auth/invalid-credential") {
-          try {
-            await createUserWithEmailAndPassword(auth, "admin@ptfit.com", "Ro8995");
-          } catch (createErr) {
-            console.warn("Failed to register admin user in Firebase Auth:", createErr);
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          const { error } = await supabase.auth.signInWithPassword({
+            email: "admin@ptfit.com",
+            password: "Ro8995"
+          });
+          if (error) {
+            await supabase.auth.signUp({
+              email: "admin@ptfit.com",
+              password: "Ro8995"
+            });
           }
-        } else {
-          console.warn("Failed to sign in admin in Firebase Auth:", err);
+        } catch (err) {
+          console.warn("Supabase auth for admin login in AdminDashboard failed:", err);
         }
       }
       setIsAdminAuthenticated(true);
@@ -171,20 +175,30 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
   const handleConfirmApproval = async () => {
     if (!approvingUser) return;
     try {
+      const targetRole = approvingUser.role === "pending_choice" ? "trainee" : approvingUser.role;
+
       // 1. Update status to approved
+      const updatedUser: UserDoc = {
+        ...approvingUser,
+        role: targetRole,
+        status: "approved"
+      };
+      await updateUserDoc(updatedUser);
       await updateUserStatus(approvingUser.uid, "approved");
 
-      // 2. Setup subscription details
-      const selectedCoachId = assignCoachId || approvingUser.coachId || "";
-      const coachDoc = users.find(u => u.uid === selectedCoachId && u.role === "coach");
-      const coachName = coachDoc ? coachDoc.name : (approvingUser.coachName || "Unassigned");
+      // 2. Setup subscription details ONLY IF trainee
+      if (targetRole === "trainee") {
+        const selectedCoachId = assignCoachId || approvingUser.coachId || "";
+        const coachDoc = users.find(u => u.uid === selectedCoachId && u.role === "coach");
+        const coachName = coachDoc ? coachDoc.name : (approvingUser.coachName || "Unassigned");
 
-      await updateSubscription(approvingUser.uid, subDuration, selectedCoachId, coachName);
+        await updateSubscription(approvingUser.uid, subDuration, selectedCoachId, coachName);
+      }
 
-      alert(lang === "ar" ? "تم الموافقة على الحساب وتفعيل الاشتراك بنجاح!" : `Successfully approved account & activated ${subDuration} subscription!`);
+      alert(lang === "ar" ? "تم قبول الحساب بنجاح!" : `Successfully approved account!`);
       setApprovingUser(null);
       setAssignCoachId("");
-      loadUsers();
+      await loadUsers();
     } catch (err) {
       console.error(err);
       alert(getTranslation(lang, "errorOccurred"));
@@ -412,7 +426,7 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
         dietMeals: dietMeals,
         updatedAt: new Date().toISOString()
       };
-      await updateProgram(updatedProgram, "Administrator");
+      await updateProgram(updatedProgram);
       alert("Training and Diet plan saved successfully!");
     } catch (err) {
       console.error(err);
@@ -429,6 +443,7 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
     }
     try {
       await addExerciseVideo({
+        id: "vid_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
         name: videoName.trim(),
         muscleGroup: videoGroup,
         videoUrl: videoUrl.trim(),
@@ -536,7 +551,7 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
     return matchesSearch && matchesStatus && matchesTabRole && matchesSubFilter && u.role !== "admin";
   });
 
-  const pendingUsers = users.filter(u => u.status === "pending" && u.role !== "admin" && (activeTab === "trainees" ? u.role === "trainee" : u.role === "coach"));
+  const pendingUsers = users.filter(u => u.status === "pending" && u.role !== "admin");
 
   // RENDER: Administrative login screen if unauthenticated
   if (!isAdminAuthenticated) {
@@ -600,8 +615,50 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
     );
   }
 
+  const handleDownloadBackupJSON = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(recoveredDataRaw, null, 2));
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", "recovered_firebase_production_backup.json");
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Production Backup Download Banner */}
+      <div className="bg-gradient-to-r from-emerald-950/80 via-neutral-900 to-neutral-900 border border-emerald-500/30 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+        <div className="flex items-start gap-3.5">
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl shrink-0 mt-0.5">
+            <Database className="h-6 w-6 stroke-[2]" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-white tracking-tight">
+                {lang === "ar" ? "نسخة احتياطية كاملة لبيانات الإنتاج المستعادة" : "Recovered Production Data Backup"}
+              </h3>
+              <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold rounded-md border border-emerald-500/30 uppercase">
+                Ready (3.1 MB)
+              </span>
+            </div>
+            <p className="text-xs text-neutral-400 mt-1 max-w-2xl leading-relaxed">
+              {lang === "ar" 
+                ? "تتضمن هذه النسخة الاحتياطية المستقلة جميع بيانات Firebase المسترجعة (31 مستخدماً، 26 برنامجاً تدريبياً، 129 إشعاراً، 9 رسائل). يمكنك تنزيل ملف JSON مباشرة أو الوصول إليه في مجلد /src/data/recovered_firebase_data.json."
+                : "This independent JSON backup contains all recovered Firestore production records (31 Users, 26 Workout/Diet Plans, 129 Notifications, 9 Chat Messages). Download directly or access at /src/data/recovered_firebase_data.json."}
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={handleDownloadBackupJSON}
+          className="px-4 py-2.5 bg-emerald-400 hover:bg-emerald-300 text-neutral-950 font-black text-xs rounded-xl shadow-lg hover:shadow-emerald-400/20 active:scale-95 transition-all flex items-center gap-2 shrink-0 cursor-pointer"
+        >
+          <Download className="h-4 w-4 stroke-[2.5]" />
+          {lang === "ar" ? "تنزيل النسخة الاحتياطية (JSON)" : "Download Backup (JSON)"}
+        </button>
+      </div>
+
       {/* Sub-Navigation Tabs */}
       <div className="flex flex-wrap border-b border-neutral-800 gap-1 md:gap-2">
         <button

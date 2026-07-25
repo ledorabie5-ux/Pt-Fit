@@ -41,8 +41,8 @@ export default function AddMemberTab({
     }
   };
 
-  const handleActivate = async (traineeId: string, label: string, days: number) => {
-    await onAssignAndActivate(traineeId, label, days);
+  const handleActivate = async (trainee: UserDoc, label: string, days: number) => {
+    await onAssignAndActivate(trainee as any, label, days);
     setPhoneQuery("");
     setResults([]);
     setHasSearched(false);
@@ -115,84 +115,85 @@ export default function AddMemberTab({
                 </span>
               </div>
 
-              {trainee.status !== "approved" ? (
-                <div className="flex items-center gap-2 p-3 bg-red-950/20 border border-red-900/30 rounded-lg text-red-400 text-xs">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <p>{isAr ? "يجب اعتماد الحساب من قبل إدارة الصالة الرياضية قبل ربط الاشتراكات." : "Account must be approved by gym administrator before you can assign subscriptions."}</p>
-                </div>
-              ) : (
-                <div className="bg-neutral-900/60 p-4 rounded-lg border border-neutral-800/80 space-y-4">
-                  <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider font-mono">
-                    {isAr ? "تعيين وتفعيل الاشتراك" : "Assign & Activate Subscription"}
-                  </h4>
-                  
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        checked={!isCustomDuration} 
-                        onChange={() => setIsCustomDuration(false)} 
-                        className="accent-emerald-500"
-                      />
-                      {isAr ? "باقات جاهزة" : "Predefined Packages"}
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        checked={isCustomDuration} 
-                        onChange={() => setIsCustomDuration(true)} 
-                        className="accent-emerald-500"
-                      />
-                      {isAr ? "مدة مخصصة" : "Custom Duration"}
-                    </label>
+              <div className="bg-neutral-900/60 p-4 rounded-lg border border-neutral-800/80 space-y-4">
+                {trainee.status !== "approved" && (
+                  <div className="flex items-center gap-2 p-2.5 bg-amber-950/30 border border-amber-800/40 rounded-lg text-amber-400 text-xs">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                    <p>{isAr ? "هذا الحساب قيد الانتظار. تفعيل الاشتراك سيقوم باعتماده وربطه بملفك كمدرب فوراً." : "This account is pending. Activating subscription will approve and link them to your profile immediately."}</p>
                   </div>
+                )}
 
-                  {!isCustomDuration ? (
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { label: isAr ? "1 شهر" : "1 Month", days: 30 },
-                        { label: isAr ? "3 أشهر" : "3 Months", days: 90 },
-                        { label: isAr ? "1 سنة" : "1 Year", days: 365 }
-                      ].map(plan => (
-                        <button
-                          key={plan.label}
-                          onClick={() => handleActivate(trainee.uid, plan.label, plan.days)}
-                          className="bg-emerald-950/40 hover:bg-emerald-600 text-emerald-400 hover:text-neutral-950 border border-emerald-800/30 font-bold font-mono text-xs py-2.5 rounded-lg transition-all cursor-pointer"
-                        >
-                          {isAr ? `تفعيل ${plan.label}` : `Activate ${plan.label}`}
-                        </button>
-                      ))}
+                <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider font-mono">
+                  {isAr ? "تعيين وتفعيل الاشتراك" : "Assign & Activate Subscription"}
+                </h4>
+                
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      checked={!isCustomDuration} 
+                      onChange={() => setIsCustomDuration(false)} 
+                      className="accent-emerald-500"
+                    />
+                    {isAr ? "باقات جاهزة" : "Predefined Packages"}
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      checked={isCustomDuration} 
+                      onChange={() => setIsCustomDuration(true)} 
+                      className="accent-emerald-500"
+                    />
+                    {isAr ? "مدة مخصصة" : "Custom Duration"}
+                  </label>
+                </div>
+
+                {!isCustomDuration ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: isAr ? "1 شهر" : "1 Month", days: 30 },
+                      { label: isAr ? "3 أشهر" : "3 Months", days: 90 },
+                      { label: isAr ? "1 سنة" : "1 Year", days: 365 }
+                    ].map(plan => (
+                      <button
+                        key={plan.label}
+                        onClick={() => handleActivate(trainee, plan.label, plan.days)}
+                        className="bg-emerald-950/40 hover:bg-emerald-600 text-emerald-400 hover:text-neutral-950 border border-emerald-800/30 font-bold font-mono text-xs py-2.5 rounded-lg transition-all cursor-pointer"
+                      >
+                        {isAr ? `تفعيل ${plan.label}` : `Activate ${plan.label}`}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        min="1"
+                        max="1000"
+                        value={customDays}
+                        onChange={(e) => setCustomDays(Number(e.target.value))}
+                        className="w-24 bg-neutral-950 border border-neutral-850 rounded-lg px-3 py-2 text-xs text-white"
+                      />
+                      <select
+                        value={customUnit}
+                        onChange={(e) => setCustomUnit(e.target.value as any)}
+                        className="bg-neutral-950 border border-neutral-850 rounded-lg px-3 py-2 text-xs text-white"
+                      >
+                        <option value="Days">{isAr ? "أيام" : "Days"}</option>
+                        <option value="Months">{isAr ? "أشهر" : "Months"}</option>
+                      </select>
+                      <button
+                        onClick={() => {
+                          const totalDays = customUnit === "Months" ? customDays * 30 : customDays;
+                          const label = `${customDays} ${isAr ? (customUnit === "Months" ? "أشهر" : "أيام") : customUnit}`;
+                          handleActivate(trainee, label, totalDays);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-sans font-bold text-xs px-4 py-2 rounded-lg transition-colors cursor-pointer"
+                      >
+                        {isAr ? "تفعيل الاشتراك" : "Activate Subscription"}
+                      </button>
                     </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="flex gap-2 items-center">
-                        <input
-                          type="number"
-                          min="1"
-                          max="1000"
-                          value={customDays}
-                          onChange={(e) => setCustomDays(Number(e.target.value))}
-                          className="w-24 bg-neutral-950 border border-neutral-850 rounded-lg px-3 py-2 text-xs text-white"
-                        />
-                        <select
-                          value={customUnit}
-                          onChange={(e) => setCustomUnit(e.target.value as any)}
-                          className="bg-neutral-950 border border-neutral-850 rounded-lg px-3 py-2 text-xs text-white"
-                        >
-                          <option value="Days">{isAr ? "أيام" : "Days"}</option>
-                          <option value="Months">{isAr ? "أشهر" : "Months"}</option>
-                        </select>
-                        <button
-                          onClick={() => {
-                            const totalDays = customUnit === "Months" ? customDays * 30 : customDays;
-                            const label = `${customDays} ${isAr ? (customUnit === "Months" ? "أشهر" : "أيام") : customUnit}`;
-                            handleActivate(trainee.uid, label, totalDays);
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-sans font-bold text-xs px-4 py-2 rounded-lg transition-colors cursor-pointer"
-                        >
-                          {isAr ? "تفعيل الاشتراك" : "Activate Subscription"}
-                        </button>
-                      </div>
                       <p className="text-[11px] text-neutral-400 italic">
                         {isAr
                           ? `سيتم تفعيل اشتراك العميل فوراً بدءاً من اليوم ولمدة ${customDays} ${customUnit === "Months" ? "أشهر" : "أيام"} (ينتهي في ${new Date(Date.now() + (customUnit === "Months" ? customDays * 30 : customDays) * 24 * 60 * 60 * 1000).toLocaleDateString()}).`
@@ -201,8 +202,7 @@ export default function AddMemberTab({
                     </div>
                   )}
                 </div>
-              )}
-            </div>
+              </div>
           ))}
         </div>
       )}

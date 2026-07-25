@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { UserDoc, WorkoutDay, DietMeal, Exercise, Program, ProgressLog } from "../types";
 import { getProgram, logProgress, getTraineeProgress, subscribeToProgram, updateUserDoc, getUser } from "../services/dbService";
+import { uploadToSupabaseStorage } from "../lib/supabase";
 import ChatWindow from "./ChatWindow";
 import { 
   Dumbbell, Apple, LineChart, MessageSquare, Calendar, Clock, 
@@ -85,13 +86,25 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
     if (currentUser.photoUrl) setPhotoUrl(currentUser.photoUrl);
   }, [currentUser.name, currentUser.photoUrl]);
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
       setInfoError(lang === "ar" ? "حجم الصورة كبير جداً (الحد الأقصى 5 ميجابايت)" : "File size is too large (max 5MB)");
       return;
     }
+
+    try {
+      const publicUrl = await uploadToSupabaseStorage(file, `trainee_${currentUser.uid}_${Date.now()}`, "trainee_photos");
+      if (publicUrl) {
+        setPhotoUrl(publicUrl);
+        setInfoError(null);
+        return;
+      }
+    } catch (err) {
+      console.warn("Supabase Storage upload fallback to DataURL:", err);
+    }
+
     const reader = new FileReader();
     reader.onloadend = () => {
       if (reader.result) {

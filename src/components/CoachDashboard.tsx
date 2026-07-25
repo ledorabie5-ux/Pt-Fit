@@ -4,7 +4,7 @@ import {
   searchTraineeByPhone, updateSubscription, getProgram, 
   updateProgram, getTraineeProgress, getTraineesForCoach, createNotification,
   freezeSubscription, resumeSubscription, changeSubscriptionDuration,
-  renewTraineeSubscription, createUserDoc, updateUserDoc, getUser,
+  renewTraineeSubscription, createUserDoc, updateUserDoc, getUser, getAllUsers,
   getWorkoutTemplates, saveWorkoutTemplate, deleteWorkoutTemplate,
   getNutritionTemplates, saveNutritionTemplate, deleteNutritionTemplate
 } from "../services/dbService";
@@ -185,37 +185,50 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
   };
 
   // Helper: Activation / Duration Management
-  const handleAssignAndActivateCustom = async (traineeId: string, durationLabel: string, daysCount: number) => {
+  const handleAssignAndActivateCustom = async (traineeInput: string | UserDoc, durationLabel: string, daysCount: number) => {
     try {
       const now = new Date();
       const expiryDate = new Date(now.getTime() + daysCount * 24 * 60 * 60 * 1000);
 
-      const existingTrainee = searchResults.find(t => t.uid === traineeId);
+      const targetUid = typeof traineeInput === "string" ? traineeInput : traineeInput.uid;
+      let existingTrainee: UserDoc | null = typeof traineeInput === "object" ? traineeInput : null;
+      
+      if (!existingTrainee) {
+        existingTrainee = await getUser(targetUid);
+      }
+
+      if (!existingTrainee) {
+        const all = await getAllUsers();
+        existingTrainee = all.find(u => u.uid === targetUid) || null;
+      }
+
+      if (!existingTrainee) {
+        alert(lang === "ar" ? "تعذر العثور على بيانات المستخدم" : "User document not found");
+        return;
+      }
+
       const updatedTrainee: UserDoc = {
+        ...existingTrainee,
+        uid: targetUid,
         role: "trainee",
         status: "approved",
-        createdAt: now.toISOString(),
-        ...existingTrainee,
-        uid: traineeId,
         coachId: currentUserId,
+        coachName: currentUserName,
         subscriptionStatus: "active",
         subscriptionStart: now.toISOString(),
         subscriptionExpiry: expiryDate.toISOString(),
-        subscriptionDuration: durationLabel as any,
-        name: existingTrainee?.name || "Client",
-        email: existingTrainee?.email || "",
-        phone: existingTrainee?.phone || ""
+        subscriptionDuration: durationLabel as any
       };
 
       await updateUserDoc(updatedTrainee);
       await createNotification(
-        traineeId,
+        targetUid,
         "Subscription Activated",
         `Your coach ${currentUserName} has activated your ${durationLabel} subscription!`
       );
 
-      alert(`Successfully approved, assigned, and activated ${durationLabel} subscription!`);
-      loadMyTrainees();
+      alert(lang === "ar" ? "تم موافقة وتفعيل اشتراك العميل بنجاح!" : `Successfully approved & activated ${durationLabel} subscription!`);
+      await loadMyTrainees();
     } catch (err) {
       console.error(err);
       alert("Error activating member subscription.");
@@ -278,7 +291,7 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
       return;
     }
     try {
-      await resumeSubscription(trainee.uid, trainee.subscriptionExpiry, trainee.frozenAt);
+      await resumeSubscription(trainee.uid);
       
       const now = new Date();
       const expiryDate = new Date(trainee.subscriptionExpiry);
@@ -324,7 +337,7 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
         dietMeals: dietMeals,
         updatedAt: new Date().toISOString()
       };
-      await updateProgram(updatedProgram, currentUserName);
+      await updateProgram(updatedProgram);
       setProgram(updatedProgram);
       alert("Workout template applied!");
     } catch (err) {
@@ -350,7 +363,7 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
         dietMeals: template.dietMeals,
         updatedAt: new Date().toISOString()
       };
-      await updateProgram(updatedProgram, currentUserName);
+      await updateProgram(updatedProgram);
       setProgram(updatedProgram);
       alert("Nutrition template applied!");
     } catch (err) {
@@ -467,24 +480,28 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
   };
 
   // Save Workout & Diet programs to database
-  const handleSaveProgram = async () => {
+  const handleSaveProgram = async (customMeals?: DietMeal[], messageOverride?: string) => {
     if (!selectedTrainee) return;
     setLoadingProgram(true);
+    const mealsToSave = customMeals || dietMeals;
     try {
       const updatedProgram: Program = {
         id: selectedTrainee.uid,
         traineeId: selectedTrainee.uid,
         coachId: currentUserId,
         workoutDays: workoutDays,
-        dietMeals: dietMeals,
+        dietMeals: mealsToSave,
         updatedAt: new Date().toISOString()
       };
-      await updateProgram(updatedProgram, currentUserName);
+      await updateProgram(updatedProgram);
       setProgram(updatedProgram);
-      alert("Trainee program schedule saved successfully!");
-    } catch (err) {
-      console.error(err);
-      alert("Error saving program.");
+      if (customMeals) {
+        setDietMeals(customMeals);
+      }
+      alert(messageOverride || (lang === "ar" ? "تم حفظ البرنامج بنجاح!" : "Program saved successfully!"));
+    } catch (err: any) {
+      console.error("Failed to save program:", err);
+      alert((lang === "ar" ? "حدث خطأ أثناء حفظ البرنامج: " : "Error saving program: ") + (err.message || err));
     } finally {
       setLoadingProgram(false);
     }
@@ -660,7 +677,8 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
           nutritionTemplates={nutritionTemplates}
           loadingTemplates={loadingTemplates}
           onCreateWorkoutTemplate={async (name, days) => {
-            const template: Omit<WorkoutTemplate, "id"> = {
+            const template: WorkoutTemplate = {
+              id: "wt_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
               name,
               coachId: currentUserId,
               workoutDays: days,
@@ -676,7 +694,8 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
             loadTemplates();
           }}
           onCreateNutritionTemplate={async (name, meals) => {
-            const template: Omit<NutritionTemplate, "id"> = {
+            const template: NutritionTemplate = {
+              id: "nt_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
               name,
               coachId: currentUserId,
               dietMeals: meals,

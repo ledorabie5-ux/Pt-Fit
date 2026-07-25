@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { UserDoc } from "../types";
-import { LogOut, CheckCircle2, AlertCircle, MessageCircle, Dumbbell, ShieldCheck } from "lucide-react";
+import { LogOut, CheckCircle2, AlertCircle, MessageCircle, Dumbbell, ShieldCheck, RefreshCw } from "lucide-react";
 import { Language } from "../utils/translations";
-import { updateUserDoc } from "../services/dbService";
+import { updateUserDoc, getUser, getAllUsers } from "../services/dbService";
 
 interface PendingApprovalViewProps {
   currentUser: UserDoc;
@@ -21,6 +21,33 @@ export default function PendingApprovalView({
 }: PendingApprovalViewProps) {
   const isArabic = lang === "ar";
   const [updating, setUpdating] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+
+  const handleCheckApprovalStatus = async () => {
+    setCheckingStatus(true);
+    try {
+      let freshUser = await getUser(currentUser.uid);
+      if (!freshUser) {
+        const all = await getAllUsers();
+        freshUser = all.find(u => u.uid === currentUser.uid) || null;
+      }
+
+      if (freshUser) {
+        if (onUserUpdate) {
+          onUserUpdate(freshUser);
+        }
+        if (freshUser.status === "approved") {
+          alert(isArabic ? "تم قبول حسابك بنجاح! يمكنك الآن استخدام منصة PT Fit." : "Your account has been approved! You can now use PT Fit.");
+        } else {
+          alert(isArabic ? "حسابك ما زال قيد الانتظار لموافقة الإدارة." : "Your account is still pending administrator approval.");
+        }
+      }
+    } catch (err) {
+      console.error("Failed checking approval status:", err);
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
 
   const handleSelectRole = async (role: "coach" | "trainee") => {
     setUpdating(true);
@@ -227,8 +254,8 @@ export default function PendingApprovalView({
           </div>
         </div>
 
-        {/* WhatsApp Button */}
-        <div className="pt-2">
+        {/* Actions: WhatsApp & Status Re-check */}
+        <div className="pt-2 space-y-3">
           <a
             href={getWhatsAppLink()}
             target="_blank"
@@ -238,8 +265,18 @@ export default function PendingApprovalView({
             <MessageCircle className="h-5 w-5 fill-neutral-950 stroke-[1.5]" />
             <span>{isArabic ? "التواصل عبر واتساب للتفعيل" : "Contact on WhatsApp"}</span>
           </a>
-          <p className="text-[10px] text-neutral-500 mt-2 font-mono uppercase tracking-wider">
-            {isArabic ? "اضغط لفتح واتساب مباشرة وإرسال طلبك" : "Click to open WhatsApp directly and send activation request"}
+
+          <button
+            onClick={handleCheckApprovalStatus}
+            disabled={checkingStatus}
+            className="w-full inline-flex items-center justify-center gap-2 bg-neutral-950 hover:bg-neutral-800 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500 font-bold text-xs py-3 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${checkingStatus ? "animate-spin text-emerald-400" : ""}`} />
+            <span>{checkingStatus ? (isArabic ? "جاري التحقق..." : "Checking Status...") : (isArabic ? "إعادة فحص حالة القبول" : "Check Approval Status")}</span>
+          </button>
+
+          <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider">
+            {isArabic ? "اضغط لإعادة التحقق مما إذا قامت الإدارة بتفعيل حسابك" : "Click to verify if administration has activated your account"}
           </p>
         </div>
       </div>

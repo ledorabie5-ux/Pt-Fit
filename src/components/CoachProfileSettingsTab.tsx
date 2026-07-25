@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { UserDoc } from "../types";
 import { updateUserDoc } from "../services/dbService";
+import { uploadToSupabaseStorage } from "../lib/supabase";
 import { Language } from "../utils/translations";
 import { 
   User, Camera, Save, CheckCircle2, MessageCircle, Instagram, 
@@ -52,13 +53,25 @@ export default function CoachProfileSettingsTab({ currentUser, lang = "en", onUs
   };
 
   // Handle direct file upload for coach photo
-  const handlePhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
       setErrorMsg(isArabic ? "حجم الصورة كبير جداً (الحد الأقصى 5 ميجابايت)" : "File size is too large (max 5MB)");
       return;
     }
+
+    try {
+      const publicUrl = await uploadToSupabaseStorage(file, `coach_${currentUser.uid}_${Date.now()}`, "coach_photos");
+      if (publicUrl) {
+        setPhotoUrl(publicUrl);
+        setErrorMsg(null);
+        return;
+      }
+    } catch (err) {
+      console.warn("Supabase Storage upload fallback to DataURL:", err);
+    }
+
     const reader = new FileReader();
     reader.onloadend = () => {
       if (reader.result) {
