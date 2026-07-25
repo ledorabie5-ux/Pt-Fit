@@ -3,6 +3,7 @@ import { getSupabaseClient } from "../lib/supabase";
 import { createUserDoc, getUser, getStats, getUserByPhone, getLandingStats, LandingStats } from "../services/dbService";
 import { UserDoc, UserRole } from "../types";
 import { Dumbbell, Mail, Lock, User, Phone, Eye, EyeOff, Sparkles, ShieldCheck, Users, Activity, Video } from "lucide-react";
+import { FooterSocialLinks } from "./FooterSocialLinks";
 import { Language, getTranslation } from "../utils/translations";
 
 interface AuthViewProps {
@@ -657,6 +658,9 @@ export default function AuthView({
         <div className="flex items-center gap-1.5 flex-wrap">
           <span>© PT Fit 2026. {lang === "ar" ? "جميع الحقوق محفوظة" : "All rights reserved."}</span>
         </div>
+        
+        <FooterSocialLinks />
+
         <button
           onClick={() => setIsAdminLogin(true)}
           className="text-neutral-500 hover:text-emerald-400 font-mono text-xs transition-colors hover:underline cursor-pointer"

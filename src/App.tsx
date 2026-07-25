@@ -8,6 +8,7 @@ import CoachDashboard from "./components/CoachDashboard";
 import TraineeDashboard from "./components/TraineeDashboard";
 import NotificationBell from "./components/NotificationBell";
 import PendingApprovalView from "./components/PendingApprovalView";
+import { FooterSocialLinks } from "./components/FooterSocialLinks";
 import { Dumbbell, LogOut, Heart, Settings } from "lucide-react";
 import { Language, getTranslation } from "./utils/translations";
 
@@ -222,13 +223,16 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-neutral-900 bg-neutral-950 px-6 py-6 text-center text-xs text-neutral-500 space-y-2">
-        <div className="flex items-center justify-center gap-1 flex-wrap">
-          <span>{getTranslation(lang, "footerMadeWith")}</span>
-          <Heart className="h-3 w-3 text-emerald-500 fill-emerald-500" />
-          <span>{getTranslation(lang, "footerForAthletes")}</span>
+      <footer className="border-t border-neutral-900 bg-neutral-950 px-6 py-6 text-center text-xs text-neutral-500 space-y-4">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center justify-center gap-1 flex-wrap">
+            <span>{getTranslation(lang, "footerMadeWith")}</span>
+            <Heart className="h-3 w-3 text-emerald-500 fill-emerald-500" />
+            <span>{getTranslation(lang, "footerForAthletes")}</span>
+          </div>
+          <FooterSocialLinks />
         </div>
-        <p className="font-mono text-[9px] text-neutral-600 uppercase tracking-widest">
+        <p className="font-mono text-[9px] text-neutral-600 uppercase tracking-widest text-center">
           {getTranslation(lang, "systemStatus")}
         </p>
       </footer>
