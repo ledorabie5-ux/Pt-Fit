@@ -1281,6 +1281,10 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
   }
 
   const supabase = getSupabaseClient();
+  if (!supabase) {
+    throw new Error("Supabase Database is NOT connected! Please enter your Supabase Project URL and Public Anon Key in the Database Settings section below.");
+  }
+
   const dataObj = backup.data && typeof backup.data === "object" ? backup.data : backup;
   const details: Record<string, number> = {};
   let totalRestored = 0;
@@ -1493,6 +1497,11 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
     totalRestored,
     details
   };
+}
+
+export async function migrateAllLocalDataToSupabase(): Promise<{ success: boolean; totalRestored: number; details: Record<string, number> }> {
+  const backup = await createFullWebsiteBackup();
+  return await restoreFullWebsiteBackup(backup);
 }
 
 

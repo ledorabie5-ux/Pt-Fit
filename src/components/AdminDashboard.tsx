@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { getSupabaseClient } from "../lib/supabase";
+import { getSupabaseClient, isSupabaseConfigured, getSupabaseCredentials, setSupabaseCredentials, clearSupabaseCredentials, testSupabaseConnection } from "../lib/supabase";
 import { UserDoc, UserRole, UserStatus, Program, WorkoutDay, DietMeal, Exercise, ExerciseVideo, ProgressLog } from "../types";
 import { 
   getAllUsers, updateUserStatus, updateSubscription, 
@@ -7,14 +7,14 @@ import {
   cancelSubscription, broadcastAnnouncement, getExerciseVideos,
   addExerciseVideo, deleteExerciseVideo, getTraineeProgress,
   createFullWebsiteBackup, validateBackupData, restoreFullWebsiteBackup,
-  BackupValidationResult
+  migrateAllLocalDataToSupabase, BackupValidationResult
 } from "../services/dbService";
 import { 
   Users, UserCheck, Shield, AlertCircle, RefreshCw, 
   Search, CheckCircle2, XCircle, Award, Calendar, Phone, Mail,
   Lock, KeyRound, Dumbbell, Apple, Plus, Trash2, Edit2, Save, Video, ClipboardList, UserX,
   Megaphone, History, Sparkles, ShieldAlert, Download, Database,
-  Upload, HardDrive, FileText, AlertTriangle, CheckCircle, Server, RefreshCcw, FileCheck
+  Upload, HardDrive, FileText, AlertTriangle, CheckCircle, Server, RefreshCcw, FileCheck, Copy
 } from "lucide-react";
 import recoveredDataRaw from "../data/recovered_firebase_data.json";
 import { Language, getTranslation } from "../utils/translations";
@@ -54,6 +54,13 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
   const [restoreSuccessMsg, setRestoreSuccessMsg] = useState<string | null>(null);
   const [restoreErrorMsg, setRestoreErrorMsg] = useState<string | null>(null);
   const [restoreDetails, setRestoreDetails] = useState<Record<string, number> | null>(null);
+
+  // Supabase Configuration & Synchronization States
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState(getSupabaseCredentials().url);
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState(getSupabaseCredentials().anonKey);
+  const [supabaseConnected, setSupabaseConnected] = useState(isSupabaseConfigured());
+  const [savingSupabaseConfig, setSavingSupabaseConfig] = useState(false);
+  const [migratingLocalData, setMigratingLocalData] = useState(false);
 
   // Exercise Videos Library States
   const [exerciseVideos, setExerciseVideos] = useState<ExerciseVideo[]>([]);
@@ -578,6 +585,79 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
       setRestoreErrorMsg((lang === "ar" ? "فشلت عملية الاستعادة: " : "Restore failed: ") + (err.message || err));
     } finally {
       setRestoringBackup(false);
+    }
+  };
+
+  // Save Supabase credentials & reconnect
+  const handleSaveSupabaseCredentials = async () => {
+    if (!supabaseUrlInput.trim() || !supabaseKeyInput.trim()) {
+      alert(lang === "ar" ? "الرجاء إدخال رابط المشروع ومفتاح Supabase العام." : "Please enter both your Supabase Project URL and Public Anon Key.");
+      return;
+    }
+    setSavingSupabaseConfig(true);
+    setRestoreSuccessMsg(null);
+    setRestoreErrorMsg(null);
+    try {
+      setSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
+      const testResult = await testSupabaseConnection();
+      if (!testResult.success) {
+        setSupabaseConnected(false);
+        setRestoreErrorMsg(testResult.message || (lang === "ar" ? "فشل الاتصال بـ Supabase" : "Failed to connect to Supabase."));
+        return;
+      }
+      setSupabaseConnected(true);
+      setRestoreSuccessMsg(lang === "ar" ? "تم حفظ الاتصال بقاعدة بيانات Supabase واختباره بنجاح!" : "Supabase credentials saved & connection tested successfully!");
+      await loadUsers();
+      await loadVideos();
+    } catch (err: any) {
+      console.error("Failed to connect Supabase:", err);
+      setRestoreErrorMsg((lang === "ar" ? "فشل الاتصال بـ Supabase: " : "Failed to connect Supabase: ") + (err.message || err));
+    } finally {
+      setSavingSupabaseConfig(false);
+    }
+  };
+
+  // Migrate all local storage / cache data to Supabase
+  const handleMigrateAllLocalData = async () => {
+    if (!isSupabaseConfigured()) {
+      alert(lang === "ar" ? "الرجاء إدخال بيانات اتصال Supabase أولاً." : "Please configure Supabase connection credentials first.");
+      return;
+    }
+    setMigratingLocalData(true);
+    setRestoreSuccessMsg(null);
+    setRestoreErrorMsg(null);
+    try {
+      const result = await migrateAllLocalDataToSupabase();
+      setRestoreSuccessMsg(lang === "ar" ? "تم رفع كافة بيانات الموقع والعملاء بنجاح إلى جداول Supabase الحية!" : "All local website records successfully inserted into your live Supabase tables!");
+      setRestoreDetails(result.details);
+      await loadUsers();
+      await loadVideos();
+    } catch (err: any) {
+      console.error("Supabase migration failed:", err);
+      const errText = err.message || String(err);
+      if (errText.includes("Invalid API key") || errText.includes("apiKey")) {
+        setRestoreErrorMsg(
+          lang === "ar"
+            ? "عفواً، مفتاح Supabase Anon Key غير صحيح أو غير صالح. يرجى الانتقال إلى لوحة تحكم Supabase > Project Settings > API ونسخ المفتاح العام (anon public) وإدخاله في قسم إعدادات قاعدة البيانات أدناه."
+            : "The Supabase Public Anon Key is invalid or incorrect. Please navigate to your Supabase Dashboard > Project Settings > API, copy the 'anon public' key, paste it into the Database Settings inputs below, and click 'Save & Test Supabase Connection'."
+        );
+      } else if (errText.includes("permission denied") || errText.includes("row-level security") || errText.includes("42501")) {
+        setRestoreErrorMsg(
+          lang === "ar"
+            ? "تم رفض الإذن لكتابة البيانات في جداول Supabase. يرجى تشغيل ملف supabase_schema.sql المحدث في محرر SQL في Supabase (SQL Editor) لمنح الصلاحيات وتفعيل سياسات الوصول."
+            : "Permission denied for Supabase tables. Please copy & run the updated 'supabase_schema.sql' script in your Supabase SQL Editor (Dashboard > SQL Editor) to grant full access privileges to the anon role."
+        );
+      } else if (errText.includes("does not exist") || errText.includes("relation") || errText.includes("42P01")) {
+        setRestoreErrorMsg(
+          lang === "ar"
+            ? "بعض جداول قاعدة البيانات غير موجودة في Supabase. يرجى تشغيل ملف supabase_schema.sql في محرر SQL في Supabase بإنشاء جميع الجداول."
+            : "Tables missing in Supabase. Please copy & run the 'supabase_schema.sql' script in your Supabase SQL Editor to create the necessary tables."
+        );
+      } else {
+        setRestoreErrorMsg((lang === "ar" ? "فشلت عملية الرفع إلى Supabase: " : "Failed to upload to Supabase: ") + errText);
+      }
+    } finally {
+      setMigratingLocalData(false);
     }
   };
 
@@ -1661,6 +1741,151 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
                   {getTranslation(lang, "backupSectionDesc")}
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* SUPABASE CONNECTION & SYNC CARD */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-neutral-800 pb-5">
+              <div className="flex items-center gap-3">
+                <div className={`p-3 rounded-xl border ${
+                  supabaseConnected 
+                    ? "bg-emerald-950/60 border-emerald-500/30 text-emerald-400" 
+                    : "bg-rose-950/60 border-rose-500/30 text-rose-400"
+                }`}>
+                  <Server className="h-6 w-6 stroke-[2]" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-md font-black text-white">
+                      {lang === "ar" ? "ربط قاعدة بيانات Supabase المباشرة" : "Live Supabase Database Connection"}
+                    </h4>
+                    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border ${
+                      supabaseConnected 
+                        ? "bg-emerald-950 text-emerald-400 border-emerald-500/30" 
+                        : "bg-rose-950 text-rose-400 border-rose-500/30"
+                    }`}>
+                      {supabaseConnected 
+                        ? (lang === "ar" ? "متصل وقيد التشغيل 🟢" : "Connected & Active 🟢") 
+                        : (lang === "ar" ? "غير متصل 🔴" : "Not Connected 🔴")}
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    {lang === "ar"
+                      ? "إدخال وحفظ بيانات الاتصال بقاعدة بيانات Supabase الخاصة بموقعك لضمان حفظ واسترجاع البيانات تلقائياً."
+                      : "Enter your Supabase project credentials to ensure all client, coach, and program data is saved directly in PostgreSQL."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action: Immediate Local Data Migration to Supabase */}
+              <button
+                type="button"
+                onClick={handleMigrateAllLocalData}
+                disabled={migratingLocalData || !supabaseConnected}
+                className={`py-2.5 px-4 rounded-xl font-black text-xs transition-all flex items-center gap-2 shadow-lg ${
+                  supabaseConnected
+                    ? "bg-emerald-400 hover:bg-emerald-300 text-neutral-950 shadow-emerald-400/20 active:scale-95 cursor-pointer"
+                    : "bg-neutral-800 text-neutral-500 cursor-not-allowed opacity-60"
+                }`}
+              >
+                {migratingLocalData ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    {lang === "ar" ? "جاري رفع البيانات إلى Supabase..." : "Pushing Local Data to Supabase..."}
+                  </>
+                ) : (
+                  <>
+                    <HardDrive className="h-4 w-4 stroke-[2.5]" />
+                    {lang === "ar" ? "نقل البيانات الحالية إلى جداول Supabase الآن" : "Push All Local Data to Supabase Tables"}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Credentials Input Form */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
+                  <Database className="h-3.5 w-3.5 text-emerald-400" />
+                  {lang === "ar" ? "رابط مشروع Supabase (Project URL)" : "Supabase Project URL"}
+                </label>
+                <input
+                  type="text"
+                  value={supabaseUrlInput}
+                  onChange={(e) => setSupabaseUrlInput(e.target.value)}
+                  placeholder="https://xyzxyz.supabase.co"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
+                  <KeyRound className="h-3.5 w-3.5 text-emerald-400" />
+                  {lang === "ar" ? "المفتاح العام (Public Anon Key)" : "Supabase Anon Key"}
+                </label>
+                <input
+                  type="password"
+                  value={supabaseKeyInput}
+                  onChange={(e) => setSupabaseKeyInput(e.target.value)}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <span className="text-[11px] text-neutral-500 font-mono">
+                {supabaseConnected
+                  ? (lang === "ar" ? "قاعدة البيانات جاهزة لاستقبال عمليات الحفظ والقراءة المباشرة." : "Database is ready for immediate live reads and writes.")
+                  : (lang === "ar" ? "يرجى نسخ رابط المفتاح والمشروع من لوحة تحكم Supabase وحفظهما هنا." : "Copy your URL & Anon key from Supabase Dashboard > Project Settings > API.")}
+              </span>
+
+              <button
+                type="button"
+                onClick={handleSaveSupabaseCredentials}
+                disabled={savingSupabaseConfig}
+                className="py-2.5 px-5 bg-indigo-500 hover:bg-indigo-400 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer flex items-center gap-2"
+              >
+                {savingSupabaseConfig ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    {lang === "ar" ? "جاري الاتصال..." : "Connecting..."}
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 stroke-[2.5]" />
+                    {lang === "ar" ? "حفظ واختبار الاتصال بـ Supabase" : "Save & Test Supabase Connection"}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* SQL PERMISSIONS FIX BOX */}
+            <div className="mt-4 p-4 bg-neutral-950/80 border border-indigo-500/30 rounded-xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs">
+                  <Shield className="h-4 w-4" />
+                  <span>{lang === "ar" ? "حل مشكلة صلاحيات الجدول (Permission Denied / RLS)" : "Fix Table Permissions & RLS Policies"}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sql = `GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;\nGRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;\nGRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;\nGRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;\nALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;\n\nDO $$\nDECLARE\n  t text;\nBEGIN\n  FOR t IN SELECT unnest(ARRAY[\n    'users', 'programs', 'nutrition_plans', 'exercise_videos', \n    'progress_logs', 'notifications', 'chat_messages', \n    'workout_templates', 'nutrition_templates'\n  ]) LOOP\n    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t);\n    EXECUTE format('DROP POLICY IF EXISTS "Access Policy All" ON public.%I;', t);\n    EXECUTE format('CREATE POLICY "Access Policy All" ON public.%I FOR ALL TO public USING (true) WITH CHECK (true);', t);\n  END LOOP;\nEND $$;`;
+                    navigator.clipboard.writeText(sql);
+                    alert(lang === "ar" ? "تم نسخ كود إصلاح الصلاحيات! يرجى لصقه وتشغيله في Supabase SQL Editor." : "Copied SQL permission script! Paste and run it in Supabase SQL Editor.");
+                  }}
+                  className="py-1.5 px-3 bg-indigo-950 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1.5"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {lang === "ar" ? "نسخ كود إصلاح الصلاحيات SQL" : "Copy SQL Permission Script"}
+                </button>
+              </div>
+              <p className="text-[11px] text-neutral-400 leading-relaxed">
+                {lang === "ar"
+                  ? "إذا ظهرت لك رسالة خطأ 'permission denied for table users'، اضغط على الزر أعلاه لنسخ كود SQL ثم قم بلصقه وتشغيله في لوحة تحكم Supabase > SQL Editor لمنح صلاحيات الجدول كاملة."
+                  : "If you receive 'permission denied for table users', click the button above to copy the SQL script, then paste and click Run in your Supabase Dashboard > SQL Editor to grant table privileges and configure RLS policies."}
+              </p>
             </div>
           </div>
 

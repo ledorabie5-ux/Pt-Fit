@@ -197,6 +197,13 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.progress_logs;
 
 -- Row Level Security (RLS) & Table Access Policies
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+
 DO $$
 DECLARE
   t text;
@@ -208,8 +215,9 @@ BEGIN
   ]) LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t);
     EXECUTE format('DROP POLICY IF EXISTS "Access Policy All" ON public.%I;', t);
-    EXECUTE format('CREATE POLICY "Access Policy All" ON public.%I FOR ALL USING (true) WITH CHECK (true);', t);
+    EXECUTE format('CREATE POLICY "Access Policy All" ON public.%I FOR ALL TO public USING (true) WITH CHECK (true);', t);
   END LOOP;
 END $$;
+
 
 
