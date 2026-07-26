@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { UserDoc } from "../types";
-import { getAllCoaches, assignCoachToTrainee, updateUserDoc } from "../services/dbService";
+import { getAllCoaches, assignCoachToTrainee, updateUserDoc, canViewProfilePhoto } from "../services/dbService";
 import { Language } from "../utils/translations";
 import { 
   Users, Search, ShieldCheck, Award, MessageCircle, ExternalLink, 
-  Check, Instagram, Youtube, Facebook, Twitter, Globe, Edit3, X, Sparkles, CheckCircle2, Phone
+  Check, Instagram, Youtube, Facebook, Twitter, Globe, Edit3, X, Sparkles, CheckCircle2, Phone, User as UserIcon
 } from "lucide-react";
 
 interface AllCoachesViewProps {
@@ -222,35 +222,52 @@ export default function AllCoachesView({ currentUser, lang, onUserUpdate }: AllC
                 )}
 
                 <div className="space-y-4">
+                  {/* Active Coach Badge */}
+                  {isMyCoach && (
+                    <div className="flex justify-end mb-1">
+                      <span className="bg-emerald-950 text-emerald-400 border border-emerald-800/60 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 font-mono">
+                        <Check className="h-3 w-3 stroke-[3]" />
+                        {isArabic ? "مدربك الحالي" : "YOUR CURRENT COACH"}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Photo & Identity Header */}
                   <div className="flex items-start gap-4">
                     <div className="relative shrink-0">
-                      <img
-                        src={
-                          coach.photoUrl ||
-                          "https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=500&auto=format&fit=crop&q=80"
-                        }
-                        alt={coach.name}
-                        referrerPolicy="no-referrer"
-                        className="h-20 w-20 md:h-24 md:w-24 rounded-2xl object-cover border-2 border-neutral-800 shadow-md"
-                      />
+                      {coach.photoUrl ? (
+                        <img
+                          src={coach.photoUrl}
+                          alt={coach.name}
+                          referrerPolicy="no-referrer"
+                          className="h-20 w-20 md:h-24 md:w-24 rounded-2xl object-cover border-2 border-neutral-800 shadow-md"
+                        />
+                      ) : (
+                        <div className="h-20 w-20 md:h-24 md:w-24 rounded-2xl bg-neutral-900 border-2 border-neutral-800 shadow-md flex items-center justify-center text-neutral-400">
+                          <UserIcon className="h-10 w-10 text-neutral-500" />
+                        </div>
+                      )}
                       <div className="absolute -bottom-1 -right-1 bg-neutral-950 p-1 rounded-full border border-neutral-800">
                         <ShieldCheck className="h-4 w-4 text-emerald-400" />
                       </div>
                     </div>
 
-                    <div className="space-y-1.5 flex-1 min-w-0 pr-12 rtl:pl-12 rtl:pr-0">
-                      <h3 className="text-base md:text-lg font-bold text-white truncate">{coach.name}</h3>
+                    <div className="space-y-1.5 flex-1 min-w-0 bg-transparent border-0 p-0 m-0 w-full">
+                      <div className="bg-transparent border-0 p-0 m-0 w-full min-w-0">
+                        <h3 className="text-base md:text-lg font-bold text-white leading-snug break-words whitespace-normal">
+                          {coach.name}
+                        </h3>
+                      </div>
                       
                       {coach.specialization && (
-                        <p className="text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/30 px-2.5 py-0.5 rounded-md inline-block">
+                        <p className="text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/30 px-2.5 py-0.5 rounded-md inline-block max-w-full break-words">
                           {coach.specialization}
                         </p>
                       )}
 
                       {coach.yearsOfExperience !== undefined && coach.yearsOfExperience !== null && (
                         <div className="flex items-center gap-1 text-[11px] text-neutral-400 font-mono mt-1">
-                          <Award className="h-3.5 w-3.5 text-amber-400" />
+                          <Award className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                           <span>{coach.yearsOfExperience} {isArabic ? "سنوات خبرة" : "Years Experience"}</span>
                         </div>
                       )}
@@ -426,18 +443,23 @@ export default function AllCoachesView({ currentUser, lang, onUserUpdate }: AllC
             </button>
 
             <div className="flex items-center gap-4 border-b border-neutral-800 pb-4">
-              <img
-                src={
-                  selectedCoachForModal.photoUrl ||
-                  "https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=500&auto=format&fit=crop&q=80"
-                }
-                alt={selectedCoachForModal.name}
-                referrerPolicy="no-referrer"
-                className="h-20 w-20 rounded-2xl object-cover border-2 border-neutral-800"
-              />
-              <div className="space-y-1">
-                <h3 className="text-lg font-bold text-white">{selectedCoachForModal.name}</h3>
-                <p className="text-xs font-bold text-emerald-400">{selectedCoachForModal.specialization}</p>
+              {selectedCoachForModal.photoUrl ? (
+                <img
+                  src={selectedCoachForModal.photoUrl}
+                  alt={selectedCoachForModal.name}
+                  referrerPolicy="no-referrer"
+                  className="h-20 w-20 rounded-2xl object-cover border-2 border-neutral-800 shrink-0"
+                />
+              ) : (
+                <div className="h-20 w-20 rounded-2xl bg-neutral-900 border-2 border-neutral-800 flex items-center justify-center text-neutral-400 shrink-0">
+                  <UserIcon className="h-10 w-10 text-neutral-500" />
+                </div>
+              )}
+              <div className="space-y-1 flex-1 min-w-0 bg-transparent border-0 p-0">
+                <h3 className="text-lg font-bold text-white leading-snug break-words whitespace-normal">{selectedCoachForModal.name}</h3>
+                {selectedCoachForModal.specialization && (
+                  <p className="text-xs font-bold text-emerald-400">{selectedCoachForModal.specialization}</p>
+                )}
                 {selectedCoachForModal.yearsOfExperience && (
                   <p className="text-[11px] text-neutral-400 font-mono">
                     {selectedCoachForModal.yearsOfExperience} {isArabic ? "سنوات خبرة تدريبية" : "Years Coaching Experience"}
@@ -455,6 +477,19 @@ export default function AllCoachesView({ currentUser, lang, onUserUpdate }: AllC
                   {selectedCoachForModal.bio || (isArabic ? "لا توجد نبذة إضافية مسجلة." : "No description provided.")}
                 </p>
               </div>
+
+              {selectedCoachForModal.certifications && (
+                <div>
+                  <h4 className="font-bold text-neutral-300 font-mono uppercase tracking-wider mb-1.5">
+                    {isArabic ? "الشهادات والتراخيص" : "Certifications & Accreditation"}
+                  </h4>
+                  <div className="text-neutral-300 bg-neutral-950 p-4 rounded-xl border border-neutral-850 leading-relaxed font-mono text-[11px]">
+                    {Array.isArray(selectedCoachForModal.certifications) 
+                      ? selectedCoachForModal.certifications.join(", ") 
+                      : selectedCoachForModal.certifications}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <h4 className="font-bold text-neutral-300 font-mono uppercase tracking-wider mb-1.5">

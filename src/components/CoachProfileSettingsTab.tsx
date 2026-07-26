@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { UserDoc } from "../types";
-import { updateUserDoc } from "../services/dbService";
+import { updateUserDoc, checkPhoneOrNameExists } from "../services/dbService";
 import { uploadToSupabaseStorage } from "../lib/supabase";
 import { Language } from "../utils/translations";
 import { 
   User, Camera, Save, CheckCircle2, MessageCircle, Instagram, 
-  Youtube, Facebook, Globe, Sparkles, Phone, Award, ShieldCheck, ExternalLink, RefreshCw, Upload
+  Youtube, Facebook, Globe, Sparkles, Phone, Award, ShieldCheck, ExternalLink, RefreshCw, Upload, Lock
 } from "lucide-react";
 
 interface CoachProfileSettingsTabProps {
@@ -26,6 +26,7 @@ export default function CoachProfileSettingsTab({ currentUser, lang = "en", onUs
   );
   const [bio, setBio] = useState(currentUser.bio || "");
   const [phone, setPhone] = useState(currentUser.phone || "");
+  const [newPassword, setNewPassword] = useState("");
   
   // WhatsApp & Socials
   const [whatsappNumber, setWhatsappNumber] = useState(
@@ -94,6 +95,24 @@ export default function CoachProfileSettingsTab({ currentUser, lang = "en", onUs
     setErrorMsg(null);
 
     try {
+      const { phoneExists, nameExists } = await checkPhoneOrNameExists(
+        phone.trim(),
+        name.trim(),
+        currentUser.uid
+      );
+
+      if (phoneExists) {
+        setErrorMsg(isArabic ? "رقم الهاتف هذا مسجل بالفعل بحساب آخر." : "This phone number is already registered to another account.");
+        setSaving(false);
+        return;
+      }
+
+      if (nameExists) {
+        setErrorMsg(isArabic ? "اسم المستخدم هذا مستخدم بالفعل. اختر اسماً آخر." : "This username is already taken by another account.");
+        setSaving(false);
+        return;
+      }
+
       const cleanWaDigits = getWhatsAppCleanDigits(whatsappNumber);
 
       const updatedUser: UserDoc = {
@@ -104,6 +123,7 @@ export default function CoachProfileSettingsTab({ currentUser, lang = "en", onUs
         yearsOfExperience: yearsOfExperience ? parseInt(yearsOfExperience) : undefined,
         bio: bio.trim() || undefined,
         phone: phone.trim() || undefined,
+        ...(newPassword.trim() ? { password: newPassword.trim() } : {}),
         socialLinks: {
           whatsapp: cleanWaDigits || undefined,
           instagram: instagram.trim() || undefined,
@@ -306,6 +326,41 @@ export default function CoachProfileSettingsTab({ currentUser, lang = "en", onUs
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl pl-10 pr-4 rtl:pr-10 rtl:pl-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition-all"
                 />
                 <Award className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-amber-400 rtl:right-3.5 rtl:left-auto" />
+              </div>
+            </div>
+          </div>
+
+          {/* Phone Number & Password */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono text-neutral-300 block">
+                {isArabic ? "رقم الهاتف (للتسجيل والدخول)" : "Phone Number (Login & Account)"}
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="01127968727"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl pl-10 pr-4 rtl:pr-10 rtl:pl-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition-all"
+                />
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-400 rtl:right-3.5 rtl:left-auto" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono text-neutral-300 block">
+                {isArabic ? "تغيير كلمة المرور (اختياري)" : "Change Password (Optional)"}
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder={isArabic ? "أدخل كلمة مرور جديدة للحفظ" : "Enter new password to update"}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl pl-10 pr-4 rtl:pr-10 rtl:pl-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition-all"
+                />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-amber-400 rtl:right-3.5 rtl:left-auto" />
               </div>
             </div>
           </div>

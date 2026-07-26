@@ -20,6 +20,91 @@ const PROGRAMS_CACHE_KEY = "pt_fit_programs_cache_supabase_v1";
 // Trigger automatic config sync from Firestore
 syncSupabaseFromFirestore().catch(() => {});
 
+// Memory caches for performance optimization
+let memoryUsersCache: { data: UserDoc[]; timestamp: number } | null = null;
+let memoryVideosCache: { data: ExerciseVideo[]; timestamp: number } | null = null;
+let memoryStatsCache: { data: LandingStats; timestamp: number } | null = null;
+
+const DELETED_USERS_KEY = "pt_fit_deleted_uids";
+
+export function getDeletedUserUids(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_USERS_KEY);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw);
+    return new Set<string>(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    return new Set<string>();
+  }
+}
+
+export function saveDeletedUserUid(uid: string): void {
+  try {
+    const set = getDeletedUserUids();
+    set.add(uid);
+    localStorage.setItem(DELETED_USERS_KEY, JSON.stringify(Array.from(set)));
+  } catch (err) {}
+}
+
+export function clearDeletedUserUid(uid: string): void {
+  try {
+    const set = getDeletedUserUids();
+    set.delete(uid);
+    localStorage.setItem(DELETED_USERS_KEY, JSON.stringify(Array.from(set)));
+  } catch (err) {}
+}
+
+export function canViewProfilePhoto(currentUser: UserDoc | null | undefined, targetUid: string | undefined): boolean {
+  if (!currentUser || !targetUid) return false;
+  return currentUser.role === "admin" || currentUser.uid === targetUid;
+}
+
+export function cleanObjectForFirestore<T>(obj: T): T {
+  if (obj === undefined || obj === null) return obj;
+  if (typeof obj !== "object") return obj;
+  if (obj instanceof Date) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanObjectForFirestore(item)) as unknown as T;
+  }
+  const clean: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      clean[key] = cleanObjectForFirestore(value);
+    }
+  }
+  return clean as T;
+}
+
+export function invalidateMemoryCaches(): void {
+  memoryUsersCache = null;
+  memoryVideosCache = null;
+  memoryStatsCache = null;
+}
+
+// Phone & Username Normalization & Unique Matchers
+export function normalizePhone(phone: string | undefined | null): string {
+  if (!phone) return "";
+  return phone.replace(/[^0-9]/g, "");
+}
+
+export function phoneMatches(phone1: string | undefined | null, phone2: string | undefined | null): boolean {
+  if (!phone1 || !phone2) return false;
+  const p1 = normalizePhone(phone1);
+  const p2 = normalizePhone(phone2);
+  if (!p1 || !p2) return false;
+  if (p1 === p2) return true;
+
+  const s1 = p1.replace(/^0+/, "");
+  const s2 = p2.replace(/^0+/, "");
+  if (!s1 || !s2) return false;
+  if (s1 === s2) return true;
+
+  if (s1.length >= 7 && s2.length >= 7) {
+    return s1.endsWith(s2) || s2.endsWith(s1);
+  }
+  return false;
+}
+
 export function getLocalUsersCache(): UserDoc[] {
   try {
     const raw = localStorage.getItem(USERS_CACHE_KEY);
@@ -36,7 +121,7 @@ export function getLocalUsersCache(): UserDoc[] {
 export function saveUserToLocalCache(user: UserDoc): void {
   try {
     const current = getLocalUsersCache();
-    const idx = current.findIndex(u => u.uid === user.uid || (u.phone && user.phone && u.phone === user.phone));
+    const idx = current.findIndex(u => u.uid === user.uid || (u.phone && user.phone && phoneMatches(u.phone, user.phone)));
     if (idx >= 0) {
       current[idx] = { ...current[idx], ...user };
     } else {
@@ -83,43 +168,32 @@ export async function migrateFirebaseToSupabase(): Promise<void> {
 // -------------------------------------------------------------
 
 export async function getUser(uid: string): Promise<UserDoc | null> {
-  let foundUser: UserDoc | null = null;
-
-  // 1. Try Firestore
-  if (db) {
-    try {
-      const snap = await getDoc(doc(db, "users", uid));
-      if (snap.exists()) {
-        foundUser = { ...snap.data(), uid } as UserDoc;
-      }
-    } catch (err) {
-      console.warn("Error fetching user from Firestore:", err);
-    }
+  if (getDeletedUserUids().has(uid)) {
+    return null;
   }
 
-  // 2. Try Supabase
-  if (!foundUser) {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from("users")
-          .select("*")
-          .eq("uid", uid)
-          .maybeSingle();
-
-        if (!error && data) {
-          foundUser = data.data ? { ...data.data, uid: data.uid } : (data as unknown as UserDoc);
-        }
-      } catch (err) {
-        console.warn("Error fetching user from Supabase:", err);
-      }
-    }
+  if (memoryUsersCache) {
+    const found = memoryUsersCache.data.find(u => u.uid === uid);
+    if (found) return found;
   }
 
-  // 3. Fallback to local cache
-  if (!foundUser) {
-    foundUser = getLocalUsersCache().find(u => u.uid === uid) || null;
+  const localUser = getLocalUsersCache().find(u => u.uid === uid) || null;
+  let foundUser: UserDoc | null = localUser;
+
+  const supabase = getSupabaseClient();
+  const [firestoreRes, supabaseRes] = await Promise.allSettled([
+    db ? getDoc(doc(db, "users", uid)) : Promise.resolve(null),
+    supabase ? supabase.from("users").select("*").eq("uid", uid).maybeSingle() : Promise.resolve(null)
+  ]);
+
+  if (firestoreRes.status === "fulfilled" && firestoreRes.value && firestoreRes.value.exists()) {
+    foundUser = { ...foundUser, ...firestoreRes.value.data(), uid } as UserDoc;
+  }
+
+  if (supabaseRes.status === "fulfilled" && supabaseRes.value && !supabaseRes.value.error && supabaseRes.value.data) {
+    const data = supabaseRes.value.data;
+    const suUser: UserDoc = data.data ? { ...data.data, uid: data.uid } : (data as unknown as UserDoc);
+    foundUser = { ...foundUser, ...suUser };
   }
 
   if (foundUser) {
@@ -130,37 +204,32 @@ export async function getUser(uid: string): Promise<UserDoc | null> {
 }
 
 export async function createUserDoc(user: UserDoc): Promise<void> {
+  invalidateMemoryCaches();
+  if (user.uid) {
+    clearDeletedUserUid(user.uid);
+  }
   saveUserToLocalCache(user);
 
-  // 1. Save to Firestore
-  if (db) {
-    try {
-      await setDoc(doc(db, "users", user.uid), {
-        ...user,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-    } catch (err) {
-      console.error("Error creating user in Firestore:", err);
-    }
-  }
-
-  // 2. Save to Supabase
   const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      await supabase.from("users").upsert({
-        uid: user.uid,
-        role: user.role || "trainee",
-        status: user.status || "pending",
-        phone: user.phone || null,
-        email: user.email || "",
-        coach_id: user.coachId || null,
-        data: user
-      }, { onConflict: "uid" });
-    } catch (err) {
-      console.error("Error creating user doc in Supabase:", err);
-    }
-  }
+
+  const firestoreTask = db ? setDoc(doc(db, "users", user.uid), cleanObjectForFirestore({
+    ...user,
+    updatedAt: new Date().toISOString()
+  }), { merge: true }) : Promise.resolve();
+
+  const supabaseTask = supabase ? supabase.from("users").upsert({
+    uid: user.uid,
+    name: user.name,
+    role: user.role || "trainee",
+    status: user.status || "pending",
+    phone: user.phone || null,
+    email: user.email || "",
+    coach_id: user.coachId || null,
+    password: user.password || null,
+    data: user
+  }, { onConflict: "uid" }) : Promise.resolve();
+
+  await Promise.allSettled([firestoreTask, supabaseTask]);
 }
 
 export async function updateUserDoc(user: UserDoc): Promise<void> {
@@ -168,62 +237,77 @@ export async function updateUserDoc(user: UserDoc): Promise<void> {
 }
 
 export async function getAllUsers(): Promise<UserDoc[]> {
+  const NOW = Date.now();
+  if (memoryUsersCache && NOW - memoryUsersCache.timestamp < 3000) {
+    return memoryUsersCache.data;
+  }
+
+  const deletedUids = getDeletedUserUids();
+  const isDeletedUser = (u: any) => {
+    if (!u) return true;
+    if (u.uid && deletedUids.has(u.uid)) return true;
+    if (u.id && deletedUids.has(u.id)) return true;
+    if (u.phone) {
+      for (const d of deletedUids) {
+        if (d === u.phone || phoneMatches(u.phone, d)) return true;
+      }
+    }
+    if (u.email && deletedUids.has(u.email)) return true;
+    return false;
+  };
+
   const usersMap = new Map<string, UserDoc>();
 
   // A. From recovered production dataset
   if (Array.isArray(recoveredData.users)) {
     for (const u of recoveredData.users) {
-      if (u.uid) usersMap.set(u.uid, u);
+      if (u.uid && !isDeletedUser(u)) {
+        usersMap.set(u.uid, u);
+      }
     }
   }
 
   // B. From Local cache
   const cached = getLocalUsersCache();
   for (const u of cached) {
-    if (u.uid) {
+    if (u.uid && !isDeletedUser(u)) {
       const existing = usersMap.get(u.uid);
       usersMap.set(u.uid, existing ? { ...existing, ...u } : u);
     }
   }
 
-  // C. From Firestore
-  if (db) {
-    try {
-      const snap = await getDocs(collection(db, "users"));
-      snap.forEach(d => {
-        const uObj = { ...d.data(), uid: d.id } as UserDoc;
-        if (uObj.uid) {
-          const existing = usersMap.get(uObj.uid);
-          usersMap.set(uObj.uid, existing ? { ...existing, ...uObj } : uObj);
-          saveUserToLocalCache(uObj);
-        }
-      });
-    } catch (err) {
-      console.warn("Error fetching all users from Firestore:", err);
-    }
-  }
-
-  // D. From Supabase live records
+  // C & D. Parallel fetching from Firestore and Supabase
   const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from("users").select("*");
-      if (!error && data && Array.isArray(data)) {
-        for (const item of data) {
-          const userObj: UserDoc = item.data ? { ...item.data, uid: item.uid } : (item as unknown as UserDoc);
-          if (userObj.uid) {
-            const existing = usersMap.get(userObj.uid);
-            usersMap.set(userObj.uid, existing ? { ...existing, ...userObj } : userObj);
-            saveUserToLocalCache(userObj);
-          }
-        }
+  const [firestoreRes, supabaseRes] = await Promise.allSettled([
+    db ? getDocs(collection(db, "users")) : Promise.resolve(null),
+    supabase ? supabase.from("users").select("*") : Promise.resolve(null)
+  ]);
+
+  if (firestoreRes.status === "fulfilled" && firestoreRes.value) {
+    firestoreRes.value.forEach(d => {
+      const uObj = { ...d.data(), uid: d.id } as UserDoc;
+      if (uObj.uid && !isDeletedUser(uObj)) {
+        const existing = usersMap.get(uObj.uid);
+        usersMap.set(uObj.uid, existing ? { ...existing, ...uObj } : uObj);
+        saveUserToLocalCache(uObj);
       }
-    } catch (err) {
-      console.warn("Error fetching all users from Supabase:", err);
+    });
+  }
+
+  if (supabaseRes.status === "fulfilled" && supabaseRes.value && !supabaseRes.value.error && Array.isArray(supabaseRes.value.data)) {
+    for (const item of supabaseRes.value.data) {
+      const userObj: UserDoc = item.data ? { ...item.data, uid: item.uid, password: item.password || item.data.password } : (item as unknown as UserDoc);
+      if (userObj.uid && !isDeletedUser(userObj)) {
+        const existing = usersMap.get(userObj.uid);
+        usersMap.set(userObj.uid, existing ? { ...existing, ...userObj } : userObj);
+        saveUserToLocalCache(userObj);
+      }
     }
   }
 
-  return Array.from(usersMap.values());
+  const result = Array.from(usersMap.values()).filter(u => !isDeletedUser(u));
+  memoryUsersCache = { data: result, timestamp: NOW };
+  return result;
 }
 
 export async function getAllCoaches(): Promise<UserDoc[]> {
@@ -335,15 +419,55 @@ export async function renewTraineeSubscription(traineeId: string, duration: Subs
 }
 
 export async function getUserByPhone(phone: string): Promise<UserDoc | null> {
+  const clean = phone.trim();
+  if (!clean) return null;
   const allUsers = await getAllUsers();
-  return allUsers.find(u => u.phone === phone) || null;
+  return allUsers.find(u => (u.phone && phoneMatches(u.phone, clean)) || (u.uid && u.uid.trim() === clean)) || null;
+}
+
+export async function getUserByName(name: string): Promise<UserDoc | null> {
+  const clean = name.trim().toLowerCase();
+  if (!clean) return null;
+  const allUsers = await getAllUsers();
+  return allUsers.find(u => 
+    (u.name && u.name.trim().toLowerCase() === clean) ||
+    (u.email && u.email.trim().toLowerCase() === clean) ||
+    (u.uid && u.uid.trim().toLowerCase() === clean) ||
+    (u.phone && phoneMatches(u.phone, clean))
+  ) || null;
+}
+
+export async function checkPhoneOrNameExists(
+  phone: string,
+  name: string,
+  excludeUid?: string
+): Promise<{ phoneExists: boolean; nameExists: boolean }> {
+  const allUsers = await getAllUsers();
+  const cleanPhone = phone.trim();
+  const cleanName = name.trim().toLowerCase();
+
+  let phoneExists = false;
+  let nameExists = false;
+
+  for (const u of allUsers) {
+    if (excludeUid && u.uid === excludeUid) continue;
+    if (!phoneExists && u.phone && phoneMatches(u.phone, cleanPhone)) {
+      phoneExists = true;
+    }
+    if (!nameExists && u.name && u.name.trim().toLowerCase() === cleanName) {
+      nameExists = true;
+    }
+    if (phoneExists && nameExists) break;
+  }
+
+  return { phoneExists, nameExists };
 }
 
 export async function searchTraineeByPhone(phoneQuery: string): Promise<UserDoc[]> {
   const cleaned = phoneQuery.trim();
   if (!cleaned) return [];
   const allUsers = await getAllUsers();
-  return allUsers.filter(u => u.phone && u.phone.includes(cleaned));
+  return allUsers.filter(u => u.phone && (phoneMatches(u.phone, cleaned) || u.phone.includes(cleaned)));
 }
 
 export async function getTraineesForCoach(coachId: string): Promise<UserDoc[]> {
@@ -356,59 +480,38 @@ export async function getTraineesForCoach(coachId: string): Promise<UserDoc[]> {
 // -------------------------------------------------------------
 
 export async function getProgram(traineeId: string): Promise<Program | null> {
-  let foundProgram: Program | null = null;
+  const localCache = getLocalProgramsCache();
+  let foundProgram: Program | null = localCache[traineeId] || null;
 
-  // 1. Try Firestore
-  if (db) {
+  const supabase = getSupabaseClient();
+  const [firestoreRes, supabaseRes] = await Promise.allSettled([
+    db ? getDoc(doc(db, "programs", traineeId)) : Promise.resolve(null),
+    supabase ? supabase.from("programs").select("*").eq("trainee_id", traineeId).maybeSingle() : Promise.resolve(null)
+  ]);
+
+  if (firestoreRes.status === "fulfilled" && firestoreRes.value && firestoreRes.value.exists()) {
+    foundProgram = { ...foundProgram, ...firestoreRes.value.data(), id: traineeId, traineeId } as Program;
+  } else if (db && !foundProgram) {
     try {
-      const snap = await getDoc(doc(db, "programs", traineeId));
-      if (snap.exists()) {
-        foundProgram = { ...snap.data(), id: traineeId, traineeId } as Program;
-      } else {
-        const nutSnap = await getDoc(doc(db, "nutrition_plans", traineeId));
-        if (nutSnap.exists()) {
-          const nutData = nutSnap.data();
-          foundProgram = {
-            id: traineeId,
-            traineeId,
-            coachId: nutData.coachId || "",
-            workoutDays: [],
-            dietMeals: nutData.dietMeals || nutData.meals || [],
-            updatedAt: nutData.updatedAt || new Date().toISOString()
-          };
-        }
+      const nutSnap = await getDoc(doc(db, "nutrition_plans", traineeId));
+      if (nutSnap.exists()) {
+        const nutData = nutSnap.data();
+        foundProgram = {
+          id: traineeId,
+          traineeId,
+          coachId: nutData.coachId || "",
+          workoutDays: [],
+          dietMeals: nutData.dietMeals || nutData.meals || [],
+          updatedAt: nutData.updatedAt || new Date().toISOString()
+        };
       }
-    } catch (err) {
-      console.warn("Error fetching program from Firestore:", err);
-    }
+    } catch (err) {}
   }
 
-  // 2. Try Supabase
-  if (!foundProgram) {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from("programs")
-          .select("*")
-          .eq("trainee_id", traineeId)
-          .maybeSingle();
-
-        if (!error && data) {
-          foundProgram = data.data ? { ...data.data, id: data.id } : (data as unknown as Program);
-        }
-      } catch (err) {
-        console.warn("Error fetching program from Supabase:", err);
-      }
-    }
-  }
-
-  // 3. Fallback to local cache
-  if (!foundProgram) {
-    const localCache = getLocalProgramsCache();
-    if (localCache[traineeId]) {
-      foundProgram = localCache[traineeId];
-    }
+  if (supabaseRes.status === "fulfilled" && supabaseRes.value && !supabaseRes.value.error && supabaseRes.value.data) {
+    const data = supabaseRes.value.data;
+    const suProg: Program = data.data ? { ...data.data, id: data.id } : (data as unknown as Program);
+    foundProgram = { ...foundProgram, ...suProg };
   }
 
   if (foundProgram) {
@@ -449,55 +552,43 @@ export async function updateProgram(program: Program): Promise<void> {
 
   saveProgramToLocalCache(cleanProgram);
 
-  // 1. Firestore
-  if (db) {
-    try {
-      await setDoc(doc(db, "programs", cleanProgram.id), cleanProgram, { merge: true });
-      if (cleanProgram.dietMeals) {
-        await setDoc(doc(db, "nutrition_plans", cleanProgram.id), {
-          id: cleanProgram.id,
-          traineeId: cleanProgram.traineeId,
-          coachId: cleanProgram.coachId,
-          dietMeals: cleanProgram.dietMeals,
-          updatedAt: cleanProgram.updatedAt
-        }, { merge: true });
-      }
-    } catch (err) {
-      console.error("Error updating program in Firestore:", err);
-    }
-  }
-
-  // 2. Supabase
   const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      await supabase.from("programs").upsert({
-        id: cleanProgram.id,
-        trainee_id: cleanProgram.traineeId,
-        coach_id: cleanProgram.coachId || null,
-        data: cleanProgram,
-        updated_at: cleanProgram.updatedAt
-      }, { onConflict: "id" });
 
-      if (cleanProgram.dietMeals) {
-        await supabase.from("nutrition_plans").upsert({
-          id: cleanProgram.id,
-          trainee_id: cleanProgram.traineeId,
-          coach_id: cleanProgram.coachId || null,
-          data: {
-            id: cleanProgram.id,
-            traineeId: cleanProgram.traineeId,
-            coachId: cleanProgram.coachId,
-            dietMeals: cleanProgram.dietMeals,
-            updatedAt: cleanProgram.updatedAt
-          },
-          updated_at: cleanProgram.updatedAt
-        }, { onConflict: "id" });
-      }
-    } catch (err) {
-      console.error("Error updating program in Supabase:", err);
-    }
-  }
+  const firestoreTasks = db ? [
+    setDoc(doc(db, "programs", cleanProgram.id), cleanProgram, { merge: true }),
+    cleanProgram.dietMeals ? setDoc(doc(db, "nutrition_plans", cleanProgram.id), {
+      id: cleanProgram.id,
+      traineeId: cleanProgram.traineeId,
+      coachId: cleanProgram.coachId,
+      dietMeals: cleanProgram.dietMeals,
+      updatedAt: cleanProgram.updatedAt
+    }, { merge: true }) : Promise.resolve()
+  ] : [];
+
+  const supabaseTasks = supabase ? [
+    supabase.from("programs").upsert({
+      id: cleanProgram.id,
+      trainee_id: cleanProgram.traineeId,
+      coach_id: cleanProgram.coachId || null,
+      data: cleanProgram,
+      updated_at: cleanProgram.updatedAt
+    }, { onConflict: "id" }),
+    cleanProgram.dietMeals ? supabase.from("nutrition_plans").upsert({
+      id: cleanProgram.id,
+      trainee_id: cleanProgram.traineeId,
+      coach_id: cleanProgram.coachId || null,
+      data: {
+        id: cleanProgram.id,
+        traineeId: cleanProgram.traineeId,
+        coachId: cleanProgram.coachId,
+        dietMeals: cleanProgram.dietMeals,
+        updatedAt: cleanProgram.updatedAt
+      },
+      updated_at: cleanProgram.updatedAt
+    }, { onConflict: "id" }) : Promise.resolve()
+  ] : [];
+
+  await Promise.allSettled([...firestoreTasks, ...supabaseTasks]);
 }
 
 export function subscribeToProgram(traineeId: string, onUpdate: (program: Program | null) => void): () => void {
@@ -590,7 +681,7 @@ export async function addProgressLog(log: ProgressLog): Promise<void> {
   // 1. Firestore
   if (db) {
     try {
-      await setDoc(doc(db, "progress_logs", log.id), log, { merge: true });
+      await setDoc(doc(db, "progress_logs", log.id), cleanObjectForFirestore(log), { merge: true });
     } catch (err) {
       console.error("Error adding progress log to Firestore:", err);
     }
@@ -680,7 +771,7 @@ export async function getExerciseVideos(): Promise<ExerciseVideo[]> {
 export async function saveExerciseVideo(video: ExerciseVideo): Promise<void> {
   if (db) {
     try {
-      await setDoc(doc(db, "exercise_videos", video.id), video, { merge: true });
+      await setDoc(doc(db, "exercise_videos", video.id), cleanObjectForFirestore(video), { merge: true });
     } catch (err) {
       console.error("Error saving exercise video in Firestore:", err);
     }
@@ -716,15 +807,41 @@ export async function deleteExerciseVideo(videoId: string): Promise<void> {
 }
 
 export async function deleteUserDoc(uid: string): Promise<void> {
+  invalidateMemoryCaches();
+  saveDeletedUserUid(uid);
+
+  // Find user doc to capture phone & email for deletion
+  try {
+    const cached = getLocalUsersCache();
+    const found = cached.find(u => u.uid === uid || (u as any).id === uid);
+    if (found) {
+      if (found.phone) saveDeletedUserUid(found.phone);
+      if (found.email) saveDeletedUserUid(found.email);
+    }
+  } catch (err) {}
+
+  // Filter out from recoveredData array in memory
+  if (Array.isArray(recoveredData.users)) {
+    recoveredData.users = recoveredData.users.filter((u: any) => u.uid !== uid && u.id !== uid);
+  }
+
+  try {
+    const current = getLocalUsersCache();
+    const updated = current.filter(u => u.uid !== uid && (u as any).id !== uid);
+    localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(updated));
+  } catch (err) {}
+
   if (db) {
     try {
       await deleteDoc(doc(db, "users", uid));
     } catch (e) {}
   }
+
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
       await supabase.from("users").delete().eq("uid", uid);
+      await supabase.from("users").delete().eq("id", uid);
     } catch (err) {}
   }
 }
@@ -806,7 +923,7 @@ export async function createNotification(userId: string, title: string, body: st
 
   if (db) {
     try {
-      await setDoc(doc(db, "notifications", notif.id), notif, { merge: true });
+      await setDoc(doc(db, "notifications", notif.id), cleanObjectForFirestore(notif), { merge: true });
     } catch (err) {
       console.error("Error creating notification in Firestore:", err);
     }
@@ -937,7 +1054,7 @@ export async function sendChatMessage(chatId: string, senderId: string, text: st
   // 1. Firestore
   if (db) {
     try {
-      await setDoc(doc(db, "chat_messages", msg.id), msg, { merge: true });
+      await setDoc(doc(db, "chat_messages", msg.id), cleanObjectForFirestore(msg), { merge: true });
     } catch (err) {
       console.error("Error sending chat message to Firestore:", err);
     }
@@ -1099,7 +1216,7 @@ export async function getWorkoutTemplates(coachId: string): Promise<WorkoutTempl
 export async function saveWorkoutTemplate(template: WorkoutTemplate): Promise<void> {
   if (db) {
     try {
-      await setDoc(doc(db, "workout_templates", template.id), template, { merge: true });
+      await setDoc(doc(db, "workout_templates", template.id), cleanObjectForFirestore(template), { merge: true });
     } catch (e) {}
   }
   const supabase = getSupabaseClient();
@@ -1160,7 +1277,7 @@ export async function getNutritionTemplates(coachId: string): Promise<NutritionT
 export async function saveNutritionTemplate(template: NutritionTemplate): Promise<void> {
   if (db) {
     try {
-      await setDoc(doc(db, "nutrition_templates", template.id), template, { merge: true });
+      await setDoc(doc(db, "nutrition_templates", template.id), cleanObjectForFirestore(template), { merge: true });
     } catch (e) {}
   }
   const supabase = getSupabaseClient();
@@ -1516,29 +1633,42 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
     const formattedUsers: any[] = [];
 
     for (const u of rawUsers) {
+      const rawDoc = u.data && typeof u.data === "object" ? { ...u.data, ...u } : u;
+      const uid = rawDoc.uid || rawDoc.id || `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      
       const userObj: UserDoc = {
-        uid: u.uid || u.id || `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        name: u.name || "User",
-        email: u.email || "",
-        phone: u.phone || "N/A",
-        role: u.role || "trainee",
-        status: u.status || "approved",
-        coachId: u.coachId || u.coach_id || undefined,
-        coachName: u.coachName || u.coach_name || undefined,
-        subscriptionStatus: u.subscriptionStatus || u.subscription_status || "none",
-        subscriptionStart: u.subscriptionStart || u.subscription_start || undefined,
-        subscriptionExpiry: u.subscriptionExpiry || u.subscription_expiry || undefined,
-        subscriptionDuration: u.subscriptionDuration || u.subscription_duration || undefined,
-        frozenAt: u.frozenAt || u.frozen_at || undefined,
-        createdAt: u.createdAt || u.created_at || new Date().toISOString()
+        ...rawDoc,
+        uid,
+        name: rawDoc.name || "User",
+        email: rawDoc.email || "",
+        phone: rawDoc.phone || "N/A",
+        password: rawDoc.password || rawDoc.pass || rawDoc.customPassword || undefined,
+        photoUrl: rawDoc.photoUrl || rawDoc.photo_url || rawDoc.avatar_url || rawDoc.image || undefined,
+        specialization: rawDoc.specialization || undefined,
+        bio: rawDoc.bio || undefined,
+        certifications: rawDoc.certifications || undefined,
+        yearsOfExperience: rawDoc.yearsOfExperience || rawDoc.years_of_experience || undefined,
+        socialLinks: rawDoc.socialLinks || rawDoc.social_links || undefined,
+        role: rawDoc.role || "trainee",
+        status: rawDoc.status || "approved",
+        coachId: rawDoc.coachId || rawDoc.coach_id || undefined,
+        coachName: rawDoc.coachName || rawDoc.coach_name || undefined,
+        subscriptionStatus: rawDoc.subscriptionStatus || rawDoc.subscription_status || "none",
+        subscriptionStart: rawDoc.subscriptionStart || rawDoc.subscription_start || undefined,
+        subscriptionExpiry: rawDoc.subscriptionExpiry || rawDoc.subscription_expiry || undefined,
+        subscriptionDuration: rawDoc.subscriptionDuration || rawDoc.subscription_duration || undefined,
+        frozenAt: rawDoc.frozenAt || rawDoc.frozen_at || undefined,
+        createdAt: rawDoc.createdAt || rawDoc.created_at || new Date().toISOString()
       };
 
+      clearDeletedUserUid(userObj.uid);
+      if (userObj.phone) clearDeletedUserUid(userObj.phone);
       saveUserToLocalCache(userObj);
 
       // Write to Firestore
       if (db) {
         try {
-          await setDoc(doc(db, "users", userObj.uid), userObj, { merge: true });
+          await setDoc(doc(db, "users", userObj.uid), cleanObjectForFirestore(userObj), { merge: true });
         } catch (err) {
           console.warn("Firestore user restore warn:", err);
         }
@@ -1549,6 +1679,7 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
         name: userObj.name,
         email: userObj.email,
         phone: userObj.phone,
+        password: userObj.password || null,
         role: userObj.role,
         status: userObj.status,
         coach_id: userObj.coachId || null,
@@ -1594,7 +1725,7 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
 
       if (db) {
         try {
-          await setDoc(doc(db, "programs", progObj.id), progObj, { merge: true });
+          await setDoc(doc(db, "programs", progObj.id), cleanObjectForFirestore(progObj), { merge: true });
         } catch (e) {}
       }
 
@@ -1636,7 +1767,7 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
 
       if (db) {
         try {
-          await setDoc(doc(db, "nutrition_plans", id), nutObj, { merge: true });
+          await setDoc(doc(db, "nutrition_plans", id), cleanObjectForFirestore(nutObj), { merge: true });
         } catch (e) {}
       }
 
@@ -1677,7 +1808,7 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
 
       if (db) {
         try {
-          await setDoc(doc(db, "exercise_videos", vidObj.id), vidObj, { merge: true });
+          await setDoc(doc(db, "exercise_videos", vidObj.id), cleanObjectForFirestore(vidObj), { merge: true });
         } catch (e) {}
       }
 
@@ -1719,7 +1850,7 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
 
       if (db) {
         try {
-          await setDoc(doc(db, "progress_logs", logObj.id), logObj, { merge: true });
+          await setDoc(doc(db, "progress_logs", logObj.id), cleanObjectForFirestore(logObj), { merge: true });
         } catch (e) {}
       }
 
@@ -1761,7 +1892,7 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
 
       if (db) {
         try {
-          await setDoc(doc(db, "notifications", notifObj.id), notifObj, { merge: true });
+          await setDoc(doc(db, "notifications", notifObj.id), cleanObjectForFirestore(notifObj), { merge: true });
         } catch (e) {}
       }
 
@@ -1803,7 +1934,7 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
 
       if (db) {
         try {
-          await setDoc(doc(db, "chat_messages", msgObj.id), msgObj, { merge: true });
+          await setDoc(doc(db, "chat_messages", msgObj.id), cleanObjectForFirestore(msgObj), { merge: true });
         } catch (e) {}
       }
 
@@ -1845,7 +1976,7 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
 
       if (db) {
         try {
-          await setDoc(doc(db, "workout_templates", wtObj.id), wtObj, { merge: true });
+          await setDoc(doc(db, "workout_templates", wtObj.id), cleanObjectForFirestore(wtObj), { merge: true });
         } catch (e) {}
       }
 
@@ -1884,7 +2015,7 @@ export async function restoreFullWebsiteBackup(backup: any): Promise<{ success: 
 
       if (db) {
         try {
-          await setDoc(doc(db, "nutrition_templates", ntObj.id), ntObj, { merge: true });
+          await setDoc(doc(db, "nutrition_templates", ntObj.id), cleanObjectForFirestore(ntObj), { merge: true });
         } catch (e) {}
       }
 

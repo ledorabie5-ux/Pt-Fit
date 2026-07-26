@@ -7,7 +7,7 @@ import {
   cancelSubscription, broadcastAnnouncement, getExerciseVideos,
   addExerciseVideo, deleteExerciseVideo, getTraineeProgress,
   createFullWebsiteBackup, validateBackupData, restoreFullWebsiteBackup,
-  migrateAllLocalDataToSupabase, BackupValidationResult
+  migrateAllLocalDataToSupabase, checkPhoneOrNameExists, BackupValidationResult
 } from "../services/dbService";
 import { 
   Users, UserCheck, Shield, AlertCircle, RefreshCw, 
@@ -264,9 +264,12 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
       return;
     }
     try {
-      const updatedUser = { ...editingUser, customPassword: editPassword.trim() };
+      const newPass = editPassword.trim();
+      const updatedUser: UserDoc = { ...editingUser, password: newPass };
       await updateUserDoc(updatedUser);
-      alert(`Password for ${editingUser.name} has been updated to: ${editPassword.trim()}`);
+      setEditingUser(updatedUser);
+      setUsers(prev => prev.map(u => u.uid === editingUser.uid ? updatedUser : u));
+      alert(`Password for ${editingUser.name} has been updated to: ${newPass}`);
       setEditPassword("");
     } catch (err) {
       console.error(err);
@@ -308,6 +311,22 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
       return;
     }
 
+    const { phoneExists, nameExists } = await checkPhoneOrNameExists(
+      editPhone.trim(),
+      editName.trim(),
+      editingUser.uid
+    );
+
+    if (phoneExists) {
+      alert("This phone number is already registered to another account.");
+      return;
+    }
+
+    if (nameExists) {
+      alert("This username is already taken by another account.");
+      return;
+    }
+
     const coachDoc = users.find(c => c.uid === editCoachId && c.role === "coach");
     const updatedUser: UserDoc = {
       ...editingUser,
@@ -317,7 +336,8 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
       role: editRole,
       status: editStatus,
       coachId: editCoachId || undefined,
-      coachName: coachDoc ? coachDoc.name : undefined
+      coachName: coachDoc ? coachDoc.name : undefined,
+      ...(editPassword.trim() ? { password: editPassword.trim() } : {})
     };
 
     try {

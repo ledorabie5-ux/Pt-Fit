@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { getSupabaseClient } from "../lib/supabase";
-import { createUserDoc, getUser, getStats, getUserByPhone, getLandingStats, LandingStats } from "../services/dbService";
+import { createUserDoc, updateUserDoc, getUser, getStats, getUserByPhone, getUserByName, checkPhoneOrNameExists, getLandingStats, LandingStats } from "../services/dbService";
 import { UserDoc, UserRole } from "../types";
 import { Dumbbell, Mail, Lock, User, Phone, Eye, EyeOff, Sparkles, ShieldCheck, Users, Activity, Video } from "lucide-react";
 import { FooterSocialLinks } from "./FooterSocialLinks";
@@ -167,7 +167,37 @@ export default function AuthView({
         const syntheticEmail = `${cleanPhone}@ptfit.com`;
 
         try {
-          // 1. Try Supabase Auth first
+          // 1. Try DB lookup by Phone or Username
+          let matchedUser = await getUserByPhone(cleanPhone);
+          if (!matchedUser) {
+            matchedUser = await getUserByName(phone.trim());
+          }
+
+          if (matchedUser) {
+            const storedPass = (matchedUser.password || (matchedUser as any).customPassword || (matchedUser as any).pass) 
+              ? String(matchedUser.password || (matchedUser as any).customPassword || (matchedUser as any).pass).trim() 
+              : "";
+            const inputPass = String(password).trim();
+
+            if (storedPass) {
+              if (storedPass === inputPass) {
+                localStorage.setItem("pt_fit_uid", matchedUser.uid);
+                onAuthSuccess(matchedUser);
+                setLoading(false);
+                return;
+              }
+            } else {
+              // Account has no stored password (e.g. legacy import) - save input password
+              matchedUser.password = inputPass;
+              await updateUserDoc(matchedUser);
+              localStorage.setItem("pt_fit_uid", matchedUser.uid);
+              onAuthSuccess(matchedUser);
+              setLoading(false);
+              return;
+            }
+          }
+
+          // 2. Fallback: Try Supabase Auth
           if (supabase) {
             const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
               email: syntheticEmail,
@@ -185,21 +215,10 @@ export default function AuthView({
             }
           }
 
-          // 2. Check Supabase DB directly by phone
-          const userDoc = await getUserByPhone(cleanPhone);
-          if (userDoc) {
-            if (userDoc.password && userDoc.password === password) {
-              localStorage.setItem("pt_fit_uid", userDoc.uid);
-              onAuthSuccess(userDoc);
-              setLoading(false);
-              return;
-            }
-          }
-
-          setError(lang === "ar" ? "رقم الهاتف أو كلمة المرور غير صحيحة." : "Invalid phone number or password.");
+          setError(lang === "ar" ? "رقم الهاتف / اسم المستخدم أو كلمة المرور غير صحيحة." : "Invalid phone number/username or password.");
         } catch (err: any) {
           console.error("Auth error:", err);
-          setError(lang === "ar" ? "رقم الهاتف أو كلمة المرور غير صحيحة." : "Invalid phone number or password.");
+          setError(lang === "ar" ? "رقم الهاتف / اسم المستخدم أو كلمة المرور غير صحيحة." : "Invalid phone number/username or password.");
         }
       } else {
         // Registration
@@ -210,12 +229,18 @@ export default function AuthView({
         }
 
         const cleanPhone = phone.trim().replace(/[\s\(\)\-\[\]]/g, "");
+        const cleanName = name.trim();
         const syntheticEmail = `${cleanPhone}@ptfit.com`;
 
-        // Check if phone number is already registered in Supabase
-        const existingDoc = await getUserByPhone(cleanPhone);
-        if (existingDoc) {
-          setError(lang === "ar" ? "رقم الهاتف هذا مسجل بالفعل." : "This phone number is already registered.");
+        // Check unique phone number and unique username
+        const { phoneExists, nameExists } = await checkPhoneOrNameExists(cleanPhone, cleanName);
+        if (phoneExists) {
+          setError(lang === "ar" ? "رقم الهاتف هذا مسجل بالفعل بحساب آخر. يرجى استخدام رقم هاتف آخر." : "This phone number is already registered. Please use a different phone number.");
+          setLoading(false);
+          return;
+        }
+        if (nameExists) {
+          setError(lang === "ar" ? "اسم المستخدم هذا مستخدم بالفعل. يرجى اختيار اسم مستخدم آخر." : "This username is already taken. Please choose a different name.");
           setLoading(false);
           return;
         }
@@ -235,13 +260,13 @@ export default function AuthView({
 
           const newUser: UserDoc = {
             uid: newUid,
-            name: name.trim(),
+            name: cleanName,
             email: syntheticEmail,
             phone: cleanPhone,
             role: "pending_choice" as any,
             status: "pending",
             createdAt: new Date().toISOString(),
-            password: password
+            password: password.trim()
           };
 
           await createUserDoc(newUser);
