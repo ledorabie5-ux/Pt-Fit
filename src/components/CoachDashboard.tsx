@@ -4,7 +4,7 @@ import {
   searchTraineeByPhone, updateSubscription, getProgram, 
   updateProgram, getTraineeProgress, getTraineesForCoach, createNotification,
   freezeSubscription, resumeSubscription, changeSubscriptionDuration,
-  renewTraineeSubscription, createUserDoc, updateUserDoc, getUser, getAllUsers,
+  renewTraineeSubscription, createUserDoc, updateUserDoc, getUser, getAllUsers, invalidateMemoryCaches,
   getWorkoutTemplates, saveWorkoutTemplate, deleteWorkoutTemplate,
   getNutritionTemplates, saveNutritionTemplate, deleteNutritionTemplate,
   createCoachTraineeRequest, getCoachTraineeRequestsForCoach,
@@ -779,10 +779,12 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
                       onClick={async () => {
                         try {
                           await acceptCoachTraineeRequest(req);
+                          invalidateMemoryCaches();
                           alert(lang === "ar" ? `تم قبول طلب المتدرب (${req.traineeName}) بنجاح!` : `Accepted request from ${req.traineeName}!`);
                           await loadTraineeRequests();
                           await loadMyTrainees();
                         } catch (e) {
+                          console.error("Error accepting trainee request:", e);
                           alert(lang === "ar" ? "حدث خطأ أثناء قبول الطلب" : "Error accepting request");
                         }
                       }}

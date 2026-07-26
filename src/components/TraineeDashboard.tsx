@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { UserDoc, WorkoutDay, DietMeal, Exercise, Program, ProgressLog, CoachTraineeRequest } from "../types";
 import { 
-  getProgram, logProgress, getTraineeProgress, subscribeToProgram, updateUserDoc, getUser,
+  getProgram, logProgress, getTraineeProgress, subscribeToProgram, updateUserDoc, getUser, getAllUsers, invalidateMemoryCaches,
   getCoachTraineeRequestsForTrainee, acceptCoachTraineeRequest, rejectCoachTraineeRequest, updateProgram
 } from "../services/dbService";
 import { uploadToSupabaseStorage } from "../lib/supabase";
@@ -1031,11 +1031,17 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
                                 onClick={async () => {
                                   try {
                                     await acceptCoachTraineeRequest(req);
-                                    const updated = await getUser(currentUser.uid);
+                                    invalidateMemoryCaches();
+                                    let updated = await getUser(currentUser.uid);
+                                    if (!updated || updated.coachId !== req.coachId) {
+                                      const all = await getAllUsers();
+                                      updated = all.find(u => u.uid === currentUser.uid) || updated;
+                                    }
                                     if (updated && onUserUpdate) onUserUpdate(updated);
                                     alert(lang === "ar" ? `تم قبول طلب الكابتن (${req.coachName}) بنجاح! مرحباً بك.` : `Accepted offer from Captain ${req.coachName}!`);
                                     await loadCoachRequests();
                                   } catch (e) {
+                                    console.error("Error accepting request:", e);
                                     alert(lang === "ar" ? "حدث خطأ أثناء قبول الطلب" : "Error accepting request");
                                   }
                                 }}

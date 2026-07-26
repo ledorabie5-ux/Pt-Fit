@@ -176,6 +176,92 @@ export async function migrateFirebaseToSupabase(): Promise<void> {
 // USER OPERATIONS
 // -------------------------------------------------------------
 
+export function mergeUserDocs(existing: UserDoc, incoming: UserDoc): UserDoc {
+  const merged = { ...existing };
+  for (const [key, val] of Object.entries(incoming)) {
+    if (val !== undefined && val !== null && val !== "") {
+      (merged as any)[key] = val;
+    }
+  }
+
+  // Preserve coachId and coachName if present in either existing or incoming
+  if (!incoming.coachId && existing.coachId) {
+    merged.coachId = existing.coachId;
+  }
+  if (!incoming.coachName && existing.coachName) {
+    merged.coachName = existing.coachName;
+  }
+
+  // Preserve approved status and active subscription over pending
+  if (existing.status === "approved" && incoming.status !== "approved") {
+    merged.status = "approved";
+  }
+  if (existing.subscriptionStatus === "active" && incoming.subscriptionStatus !== "active") {
+    merged.subscriptionStatus = "active";
+  }
+  if (!incoming.subscriptionExpiry && existing.subscriptionExpiry) {
+    merged.subscriptionExpiry = existing.subscriptionExpiry;
+  }
+
+  return merged;
+}
+
+export async function getAllAcceptedRequests(): Promise<CoachTraineeRequest[]> {
+  const requestsMap = new Map<string, CoachTraineeRequest>();
+
+  // 1. From local requests cache
+  const cached = getLocalRequestsCache();
+  for (const r of cached) {
+    if (r && r.status === "accepted") {
+      requestsMap.set(r.id, r);
+    }
+  }
+
+  // 2. From Firestore
+  if (db) {
+    try {
+      const qSnap = await firestoreWithTimeout(getDocs(query(collection(db, "coach_trainee_requests"), where("status", "==", "accepted"))), 3000);
+      qSnap.forEach(d => {
+        const data = d.data() as CoachTraineeRequest;
+        if (data && data.status === "accepted") {
+          requestsMap.set(data.id || d.id, { ...data, id: data.id || d.id });
+        }
+      });
+    } catch (e) {}
+  }
+
+  // 3. From Supabase
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { data } = await supabase.from("coach_trainee_requests").select("*").eq("status", "accepted");
+      if (Array.isArray(data)) {
+        data.forEach(item => {
+          if (item && item.status === "accepted") {
+            requestsMap.set(item.id, item as CoachTraineeRequest);
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
+  const result = Array.from(requestsMap.values());
+  // Save accepted requests back to local cache so offline or instant loads have them
+  const allLocal = getLocalRequestsCache();
+  const mergedLocal = [...allLocal];
+  for (const acc of result) {
+    const idx = mergedLocal.findIndex(r => r.id === acc.id);
+    if (idx >= 0) {
+      mergedLocal[idx] = acc;
+    } else {
+      mergedLocal.push(acc);
+    }
+  }
+  saveLocalRequestsCache(mergedLocal);
+
+  return result;
+}
+
 export async function getUser(uid: string): Promise<UserDoc | null> {
   if (getDeletedUserUids().has(uid)) {
     return null;
@@ -196,16 +282,37 @@ export async function getUser(uid: string): Promise<UserDoc | null> {
   ]);
 
   if (firestoreRes.status === "fulfilled" && firestoreRes.value && firestoreRes.value.exists()) {
-    foundUser = { ...foundUser, ...firestoreRes.value.data(), uid } as UserDoc;
+    const fsDoc = { ...firestoreRes.value.data(), uid } as UserDoc;
+    foundUser = foundUser ? mergeUserDocs(foundUser, fsDoc) : fsDoc;
   }
 
   if (supabaseRes.status === "fulfilled" && supabaseRes.value && !supabaseRes.value.error && supabaseRes.value.data) {
     const data = supabaseRes.value.data;
     const suUser: UserDoc = data.data ? { ...data.data, uid: data.uid } : (data as unknown as UserDoc);
-    foundUser = { ...foundUser, ...suUser };
+    if (data.coach_id && !suUser.coachId) {
+      suUser.coachId = data.coach_id;
+    }
+    foundUser = foundUser ? mergeUserDocs(foundUser, suUser) : suUser;
   }
 
+  // Enforce accepted coach-trainee requests
   if (foundUser) {
+    const acceptedRequests = await getAllAcceptedRequests();
+    const myAcc = acceptedRequests.find(r => 
+      r.traineeId === uid || 
+      (foundUser?.phone && r.traineePhone && phoneMatches(foundUser.phone, r.traineePhone)) ||
+      (foundUser?.name && r.traineeName && foundUser.name.trim().toLowerCase() === r.traineeName.trim().toLowerCase())
+    );
+    if (myAcc) {
+      if (foundUser.coachId !== myAcc.coachId || foundUser.status !== "approved") {
+        foundUser.coachId = myAcc.coachId;
+        foundUser.coachName = myAcc.coachName || foundUser.coachName;
+        foundUser.status = "approved";
+        if (!foundUser.subscriptionStatus || foundUser.subscriptionStatus !== "active") {
+          foundUser.subscriptionStatus = "active";
+        }
+      }
+    }
     saveUserToLocalCache(foundUser);
   }
 
@@ -281,15 +388,16 @@ export async function getAllUsers(): Promise<UserDoc[]> {
   for (const u of cached) {
     if (u.uid && !isDeletedUser(u)) {
       const existing = usersMap.get(u.uid);
-      usersMap.set(u.uid, existing ? { ...existing, ...u } : u);
+      usersMap.set(u.uid, existing ? mergeUserDocs(existing, u) : u);
     }
   }
 
-  // C & D. Parallel fetching from Firestore and Supabase
+  // C, D & E. Parallel fetching from Firestore, Supabase, and Accepted Requests
   const supabase = getSupabaseClient();
-  const [firestoreRes, supabaseRes] = await Promise.allSettled([
+  const [firestoreRes, supabaseRes, acceptedRes] = await Promise.allSettled([
     db ? firestoreWithTimeout(getDocs(collection(db, "users"))) : Promise.resolve(null),
-    supabase ? supabase.from("users").select("*") : Promise.resolve(null)
+    supabase ? supabase.from("users").select("*") : Promise.resolve(null),
+    getAllAcceptedRequests()
   ]);
 
   if (firestoreRes.status === "fulfilled" && firestoreRes.value) {
@@ -297,8 +405,9 @@ export async function getAllUsers(): Promise<UserDoc[]> {
       const uObj = { ...d.data(), uid: d.id } as UserDoc;
       if (uObj.uid && !isDeletedUser(uObj)) {
         const existing = usersMap.get(uObj.uid);
-        usersMap.set(uObj.uid, existing ? { ...existing, ...uObj } : uObj);
-        saveUserToLocalCache(uObj);
+        const merged = existing ? mergeUserDocs(existing, uObj) : uObj;
+        usersMap.set(uObj.uid, merged);
+        saveUserToLocalCache(merged);
       }
     });
   }
@@ -306,10 +415,42 @@ export async function getAllUsers(): Promise<UserDoc[]> {
   if (supabaseRes.status === "fulfilled" && supabaseRes.value && !supabaseRes.value.error && Array.isArray(supabaseRes.value.data)) {
     for (const item of supabaseRes.value.data) {
       const userObj: UserDoc = item.data ? { ...item.data, uid: item.uid, password: item.password || item.data.password } : (item as unknown as UserDoc);
+      if (item.coach_id && !userObj.coachId) {
+        userObj.coachId = item.coach_id;
+      }
       if (userObj.uid && !isDeletedUser(userObj)) {
         const existing = usersMap.get(userObj.uid);
-        usersMap.set(userObj.uid, existing ? { ...existing, ...userObj } : userObj);
-        saveUserToLocalCache(userObj);
+        const merged = existing ? mergeUserDocs(existing, userObj) : userObj;
+        usersMap.set(userObj.uid, merged);
+        saveUserToLocalCache(merged);
+      }
+    }
+  }
+
+  // Enforce accepted coach-trainee requests across the roster
+  const accReqs = acceptedRes.status === "fulfilled" ? acceptedRes.value : [];
+  if (Array.isArray(accReqs) && accReqs.length > 0) {
+    const allList = Array.from(usersMap.values());
+    for (const req of accReqs) {
+      if (req.status !== "accepted") continue;
+      const trainee = allList.find(u => 
+        u.uid === req.traineeId || 
+        (u.phone && req.traineePhone && phoneMatches(u.phone, req.traineePhone)) ||
+        (u.name && req.traineeName && u.name.trim().toLowerCase() === req.traineeName.trim().toLowerCase())
+      );
+
+      if (trainee) {
+        if (trainee.coachId !== req.coachId || trainee.status !== "approved") {
+          trainee.coachId = req.coachId;
+          trainee.coachName = req.coachName || trainee.coachName;
+          trainee.status = "approved";
+          if (!trainee.subscriptionStatus || trainee.subscriptionStatus !== "active") {
+            trainee.subscriptionStatus = "active";
+          }
+          usersMap.set(trainee.uid, trainee);
+          saveUserToLocalCache(trainee);
+          updateUserDoc(trainee).catch(() => {});
+        }
       }
     }
   }
@@ -982,6 +1123,20 @@ export async function getCoachTraineeRequestsForCoach(coachId: string): Promise<
     } catch (e) {}
   }
 
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { data } = await supabase.from("coach_trainee_requests").select("*").eq("coachId", coachId).eq("status", "pending");
+      if (Array.isArray(data)) {
+        data.forEach(item => {
+          if (item && item.status === "pending" && !list.some(r => r.id === item.id)) {
+            list.push(item as CoachTraineeRequest);
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
   return list;
 }
 
@@ -1002,25 +1157,61 @@ export async function getCoachTraineeRequestsForTrainee(traineeId: string): Prom
     } catch (e) {}
   }
 
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { data } = await supabase.from("coach_trainee_requests").select("*").eq("traineeId", traineeId).eq("status", "pending");
+      if (Array.isArray(data)) {
+        data.forEach(item => {
+          if (item && item.status === "pending" && !list.some(r => r.id === item.id)) {
+            list.push(item as CoachTraineeRequest);
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
   return list;
 }
 
 export async function acceptCoachTraineeRequest(request: CoachTraineeRequest): Promise<void> {
+  invalidateMemoryCaches();
   const updatedReq: CoachTraineeRequest = { ...request, status: "accepted" };
   const cached = getLocalRequestsCache().map(r => r.id === request.id ? updatedReq : r);
   saveLocalRequestsCache(cached);
 
   if (db) {
     try {
-      await setDoc(doc(db, "coach_trainee_requests", request.id), { status: "accepted" }, { merge: true });
-    } catch (e) {}
+      await setDoc(doc(db, "coach_trainee_requests", request.id), cleanObjectForFirestore(updatedReq), { merge: true });
+    } catch (e) {
+      console.error("Error setting firestore request status:", e);
+    }
+  }
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase.from("coach_trainee_requests").upsert(cleanObjectForFirestore(updatedReq));
+    } catch (e) {
+      console.error("Error setting supabase request status:", e);
+    }
   }
 
   const days = request.daysCount || 30;
   const now = new Date();
   const expiry = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
-  const trainee = await getUser(request.traineeId);
+  // Robust trainee resolution
+  let trainee: UserDoc | null = await getUser(request.traineeId);
+  if (!trainee) {
+    const allUsers = await getAllUsers();
+    trainee = allUsers.find(u => 
+      u.uid === request.traineeId || 
+      (u.phone && request.traineePhone && phoneMatches(u.phone, request.traineePhone)) ||
+      (u.name && request.traineeName && u.name.trim().toLowerCase() === request.traineeName.trim().toLowerCase())
+    ) || null;
+  }
+
   if (trainee) {
     const updatedTrainee: UserDoc = {
       ...trainee,
@@ -1033,7 +1224,26 @@ export async function acceptCoachTraineeRequest(request: CoachTraineeRequest): P
       subscriptionDuration: (request.durationLabel || "1 Month") as any
     };
     await updateUserDoc(updatedTrainee);
+    if (request.traineeId && request.traineeId !== trainee.uid) {
+      await updateUserDoc({ ...updatedTrainee, uid: request.traineeId });
+    }
+
+    // Auto-reject any OTHER pending requests for this trainee to enforce single active coach assignment
+    try {
+      const allPendingForTrainee = await getCoachTraineeRequestsForTrainee(trainee.uid);
+      for (const otherReq of allPendingForTrainee) {
+        if (otherReq.id !== request.id && otherReq.status === "pending") {
+          await rejectCoachTraineeRequest(otherReq);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not clean up other pending requests:", err);
+    }
+  } else {
+    console.error("acceptCoachTraineeRequest: Trainee document not found for request", request);
   }
+
+  invalidateMemoryCaches();
 
   if (request.type === "trainee_to_coach") {
     await createNotification(
@@ -1057,7 +1267,14 @@ export async function rejectCoachTraineeRequest(request: CoachTraineeRequest): P
 
   if (db) {
     try {
-      await setDoc(doc(db, "coach_trainee_requests", request.id), { status: "rejected" }, { merge: true });
+      await setDoc(doc(db, "coach_trainee_requests", request.id), cleanObjectForFirestore(updatedReq), { merge: true });
+    } catch (e) {}
+  }
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase.from("coach_trainee_requests").upsert(cleanObjectForFirestore(updatedReq));
     } catch (e) {}
   }
 
