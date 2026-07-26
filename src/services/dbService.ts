@@ -1,7 +1,7 @@
 import { getSupabaseClient, uploadToSupabaseStorage, syncSupabaseFromFirestore } from "../lib/supabase";
 import { db } from "../lib/firebase";
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
-import { UserDoc, Program, ProgressLog, Message, AppNotification, ExerciseVideo, WorkoutTemplate, NutritionTemplate, UserStatus, SubscriptionDuration } from "../types";
+import { UserDoc, Program, ProgressLog, Message, AppNotification, ExerciseVideo, WorkoutTemplate, NutritionTemplate, UserStatus, SubscriptionDuration, CoachTraineeRequest, CoachTraineeRequestType, CoachTraineeRequestStatus } from "../types";
 import recoveredDataRaw from "../data/recovered_firebase_data.json";
 
 const recoveredData = recoveredDataRaw as {
@@ -810,39 +810,260 @@ export async function deleteUserDoc(uid: string): Promise<void> {
   invalidateMemoryCaches();
   saveDeletedUserUid(uid);
 
-  // Find user doc to capture phone & email for deletion
+  // 1. Gather all associated identifiers (uid, id, phone, email) to prevent ghost returns
+  const setOfIds = new Set<string>([uid]);
+  let userPhone = "";
+  let userEmail = "";
+
   try {
     const cached = getLocalUsersCache();
     const found = cached.find(u => u.uid === uid || (u as any).id === uid);
     if (found) {
-      if (found.phone) saveDeletedUserUid(found.phone);
-      if (found.email) saveDeletedUserUid(found.email);
+      if (found.uid) setOfIds.add(found.uid);
+      if ((found as any).id) setOfIds.add((found as any).id);
+      if (found.phone) {
+        userPhone = found.phone;
+        setOfIds.add(found.phone);
+      }
+      if (found.email) {
+        userEmail = found.email;
+        setOfIds.add(found.email);
+      }
     }
   } catch (err) {}
 
-  // Filter out from recoveredData array in memory
-  if (Array.isArray(recoveredData.users)) {
-    recoveredData.users = recoveredData.users.filter((u: any) => u.uid !== uid && u.id !== uid);
+  for (const idToSave of setOfIds) {
+    saveDeletedUserUid(idToSave);
   }
 
+  // 2. Remove from recoveredData array in memory
+  if (Array.isArray(recoveredData.users)) {
+    recoveredData.users = recoveredData.users.filter((u: any) => 
+      !setOfIds.has(u.uid) && !setOfIds.has(u.id) && !(userPhone && u.phone && phoneMatches(u.phone, userPhone)) && !(userEmail && u.email === userEmail)
+    );
+  }
+
+  // 3. Remove from localStorage cache
   try {
     const current = getLocalUsersCache();
-    const updated = current.filter(u => u.uid !== uid && (u as any).id !== uid);
+    const updated = current.filter((u: any) => 
+      !setOfIds.has(u.uid) && !setOfIds.has(u.id) && !(userPhone && u.phone && phoneMatches(u.phone, userPhone)) && !(userEmail && u.email === userEmail)
+    );
     localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(updated));
   } catch (err) {}
 
+  // 4. Firestore deletion
   if (db) {
     try {
       await deleteDoc(doc(db, "users", uid));
+      const qSnap = await getDocs(query(collection(db, "users"), where("uid", "==", uid)));
+      qSnap.forEach(async (d) => {
+        try { await deleteDoc(doc(db, "users", d.id)); } catch (e) {}
+      });
+      if (userPhone) {
+        const qSnapP = await getDocs(query(collection(db, "users"), where("phone", "==", userPhone)));
+        qSnapP.forEach(async (d) => {
+          try { await deleteDoc(doc(db, "users", d.id)); } catch (e) {}
+        });
+      }
+    } catch (e) {}
+  }
+
+  // 5. Supabase deletion
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase.from("users").delete().eq("uid", uid);
+      await supabase.from("users").delete().eq("id", uid);
+      if (userPhone) {
+        await supabase.from("users").delete().eq("phone", userPhone);
+      }
+    } catch (err) {}
+  }
+}
+
+const REQUESTS_CACHE_KEY = "pt_fit_coach_trainee_requests_cache_v1";
+
+export function getLocalRequestsCache(): CoachTraineeRequest[] {
+  try {
+    const raw = localStorage.getItem(REQUESTS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+export function saveLocalRequestsCache(requests: CoachTraineeRequest[]): void {
+  try {
+    localStorage.setItem(REQUESTS_CACHE_KEY, JSON.stringify(requests));
+  } catch (err) {}
+}
+
+export async function createCoachTraineeRequest(params: {
+  coachId: string;
+  coachName: string;
+  traineeId: string;
+  traineeName: string;
+  traineePhone?: string;
+  type: CoachTraineeRequestType;
+  durationLabel?: string;
+  daysCount?: number;
+}): Promise<CoachTraineeRequest> {
+  const reqObj: CoachTraineeRequest = {
+    id: `req_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    coachId: params.coachId,
+    coachName: params.coachName,
+    traineeId: params.traineeId,
+    traineeName: params.traineeName,
+    traineePhone: params.traineePhone,
+    type: params.type,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+    durationLabel: params.durationLabel,
+    daysCount: params.daysCount
+  };
+
+  const cached = getLocalRequestsCache();
+  saveLocalRequestsCache([reqObj, ...cached]);
+
+  if (db) {
+    try {
+      await setDoc(doc(db, "coach_trainee_requests", reqObj.id), cleanObjectForFirestore(reqObj), { merge: true });
     } catch (e) {}
   }
 
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      await supabase.from("users").delete().eq("uid", uid);
-      await supabase.from("users").delete().eq("id", uid);
-    } catch (err) {}
+      await supabase.from("coach_trainee_requests").upsert(cleanObjectForFirestore(reqObj));
+    } catch (e) {}
+  }
+
+  if (params.type === "coach_to_trainee") {
+    await createNotification(
+      params.traineeId,
+      "New Coach Request / طلب مدرب جديد",
+      `Captain ${params.coachName} sent you a coaching request! Check the "Coach Requests" tab to Accept or Decline.`
+    );
+  } else {
+    await createNotification(
+      params.coachId,
+      "New Trainee Request / طلب متدرب جديد",
+      `${params.traineeName} sent you a request to join as their coach! Check the "Trainee Requests" tab to Approve.`
+    );
+  }
+
+  return reqObj;
+}
+
+export async function getCoachTraineeRequestsForCoach(coachId: string): Promise<CoachTraineeRequest[]> {
+  const list: CoachTraineeRequest[] = getLocalRequestsCache().filter(r => r.coachId === coachId && r.status === "pending");
+
+  if (db) {
+    try {
+      const qSnap = await getDocs(query(collection(db, "coach_trainee_requests"), where("coachId", "==", coachId)));
+      qSnap.forEach(d => {
+        const data = d.data() as CoachTraineeRequest;
+        if (data && data.status === "pending") {
+          if (!list.some(r => r.id === data.id)) {
+            list.push(data);
+          }
+        }
+      });
+    } catch (e) {}
+  }
+
+  return list;
+}
+
+export async function getCoachTraineeRequestsForTrainee(traineeId: string): Promise<CoachTraineeRequest[]> {
+  const list: CoachTraineeRequest[] = getLocalRequestsCache().filter(r => r.traineeId === traineeId && r.status === "pending");
+
+  if (db) {
+    try {
+      const qSnap = await getDocs(query(collection(db, "coach_trainee_requests"), where("traineeId", "==", traineeId)));
+      qSnap.forEach(d => {
+        const data = d.data() as CoachTraineeRequest;
+        if (data && data.status === "pending") {
+          if (!list.some(r => r.id === data.id)) {
+            list.push(data);
+          }
+        }
+      });
+    } catch (e) {}
+  }
+
+  return list;
+}
+
+export async function acceptCoachTraineeRequest(request: CoachTraineeRequest): Promise<void> {
+  const updatedReq: CoachTraineeRequest = { ...request, status: "accepted" };
+  const cached = getLocalRequestsCache().map(r => r.id === request.id ? updatedReq : r);
+  saveLocalRequestsCache(cached);
+
+  if (db) {
+    try {
+      await setDoc(doc(db, "coach_trainee_requests", request.id), { status: "accepted" }, { merge: true });
+    } catch (e) {}
+  }
+
+  const days = request.daysCount || 30;
+  const now = new Date();
+  const expiry = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+  const trainee = await getUser(request.traineeId);
+  if (trainee) {
+    const updatedTrainee: UserDoc = {
+      ...trainee,
+      coachId: request.coachId,
+      coachName: request.coachName,
+      status: "approved",
+      subscriptionStatus: "active",
+      subscriptionStart: now.toISOString(),
+      subscriptionExpiry: expiry.toISOString(),
+      subscriptionDuration: (request.durationLabel || "1 Month") as any
+    };
+    await updateUserDoc(updatedTrainee);
+  }
+
+  if (request.type === "trainee_to_coach") {
+    await createNotification(
+      request.traineeId,
+      "Coach Request Accepted / تم قبول طلب المدرب",
+      `Captain ${request.coachName} accepted your coaching request! Welcome aboard.`
+    );
+  } else {
+    await createNotification(
+      request.coachId,
+      "Coach Request Accepted / تم قبول طلبك",
+      `${request.traineeName} accepted your coaching request!`
+    );
+  }
+}
+
+export async function rejectCoachTraineeRequest(request: CoachTraineeRequest): Promise<void> {
+  const updatedReq: CoachTraineeRequest = { ...request, status: "rejected" };
+  const cached = getLocalRequestsCache().map(r => r.id === request.id ? updatedReq : r);
+  saveLocalRequestsCache(cached);
+
+  if (db) {
+    try {
+      await setDoc(doc(db, "coach_trainee_requests", request.id), { status: "rejected" }, { merge: true });
+    } catch (e) {}
+  }
+
+  if (request.type === "trainee_to_coach") {
+    await createNotification(
+      request.traineeId,
+      "Request Update / تحديث الطلب",
+      `Captain ${request.coachName} was unable to accept your request at this time.`
+    );
+  } else {
+    await createNotification(
+      request.coachId,
+      "Request Update / تحديث الطلب",
+      `${request.traineeName} declined the coaching request.`
+    );
   }
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { UserDoc } from "../types";
-import { getAllCoaches, assignCoachToTrainee, updateUserDoc, canViewProfilePhoto } from "../services/dbService";
+import { getAllCoaches, updateUserDoc, canViewProfilePhoto, createCoachTraineeRequest } from "../services/dbService";
 import { Language } from "../utils/translations";
 import { 
   Users, Search, ShieldCheck, Award, MessageCircle, ExternalLink, 
@@ -59,25 +59,25 @@ export default function AllCoachesView({ currentUser, lang, onUserUpdate }: AllC
     if (!switchingCoach) return;
     setAssigning(true);
     try {
-      await assignCoachToTrainee(currentUser.uid, switchingCoach.uid, switchingCoach.name);
-      const updatedUser: UserDoc = {
-        ...currentUser,
+      await createCoachTraineeRequest({
         coachId: switchingCoach.uid,
-        coachName: switchingCoach.name
-      };
-      if (onUserUpdate) {
-        onUserUpdate(updatedUser);
-      }
+        coachName: switchingCoach.name,
+        traineeId: currentUser.uid,
+        traineeName: currentUser.name,
+        traineePhone: currentUser.phone,
+        type: "trainee_to_coach"
+      });
+
       setSuccessMessage(
         isArabic 
-          ? `تم تغيير مدربك بنجاح إلى الكابتن ${switchingCoach.name}!` 
-          : `Successfully updated your coach to Captain ${switchingCoach.name}!`
+          ? `تم إرسال طلب التدريب إلى الكابتن ${switchingCoach.name} بنجاح! سيتم الربط فور قبول الكابتن للطلب.` 
+          : `Coaching request sent to Captain ${switchingCoach.name}! The link will be activated upon coach approval.`
       );
       setSwitchingCoach(null);
-      setTimeout(() => setSuccessMessage(null), 4000);
+      setTimeout(() => setSuccessMessage(null), 5000);
     } catch (err) {
-      console.error("Error assigning coach:", err);
-      alert(isArabic ? "حدث خطأ أثناء تغيير المدرب" : "Error changing coach");
+      console.error("Error creating coach request:", err);
+      alert(isArabic ? "حدث خطأ أثناء إرسال الطلب للمدرب" : "Error sending request to coach");
     } finally {
       setAssigning(false);
     }

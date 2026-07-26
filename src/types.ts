@@ -140,3 +140,20 @@ export interface NutritionTemplate {
   createdAt: string;
 }
 
+export type CoachTraineeRequestType = "trainee_to_coach" | "coach_to_trainee";
+export type CoachTraineeRequestStatus = "pending" | "accepted" | "rejected";
+
+export interface CoachTraineeRequest {
+  id: string;
+  coachId: string;
+  coachName: string;
+  traineeId: string;
+  traineeName: string;
+  traineePhone?: string;
+  type: CoachTraineeRequestType;
+  status: CoachTraineeRequestStatus;
+  createdAt: string;
+  durationLabel?: string;
+  daysCount?: number;
+}
+

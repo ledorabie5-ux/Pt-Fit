@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { UserDoc, WorkoutDay, DietMeal, Exercise, Program, ProgressLog, WorkoutTemplate, NutritionTemplate } from "../types";
+import { UserDoc, WorkoutDay, DietMeal, Exercise, Program, ProgressLog, WorkoutTemplate, NutritionTemplate, CoachTraineeRequest } from "../types";
 import { 
   searchTraineeByPhone, updateSubscription, getProgram, 
   updateProgram, getTraineeProgress, getTraineesForCoach, createNotification,
   freezeSubscription, resumeSubscription, changeSubscriptionDuration,
   renewTraineeSubscription, createUserDoc, updateUserDoc, getUser, getAllUsers,
   getWorkoutTemplates, saveWorkoutTemplate, deleteWorkoutTemplate,
-  getNutritionTemplates, saveNutritionTemplate, deleteNutritionTemplate
+  getNutritionTemplates, saveNutritionTemplate, deleteNutritionTemplate,
+  createCoachTraineeRequest, getCoachTraineeRequestsForCoach,
+  acceptCoachTraineeRequest, rejectCoachTraineeRequest
 } from "../services/dbService";
 import AddMemberTab from "./AddMemberTab";
 import ClientManagementTab from "./ClientManagementTab";
@@ -15,7 +17,7 @@ import TemplatesTab from "./TemplatesTab";
 import CoachProfileSettingsTab from "./CoachProfileSettingsTab";
 import { 
   Dumbbell, Apple, LineChart, MessageSquare, User, Plus, Trash2, Save,
-  UserPlus, RefreshCw, Layers, CalendarDays, ClipboardList, Settings
+  UserPlus, RefreshCw, Layers, CalendarDays, ClipboardList, Settings, UserCheck, Check, X, Clock
 } from "lucide-react";
 import { Language, getTranslation } from "../utils/translations";
 
@@ -28,8 +30,29 @@ interface CoachDashboardProps {
 }
 
 export default function CoachDashboard({ currentUserId, currentUserName, currentUser, lang = "en", onUserUpdate }: CoachDashboardProps) {
-  // Navigation: 5 Main Sections for Coach
-  const [activeSection, setActiveSection] = useState<"add-member" | "client-management" | "subscription-management" | "templates" | "profile-settings">("client-management");
+  // Navigation: 6 Main Sections for Coach
+  const [activeSection, setActiveSection] = useState<"add-member" | "client-management" | "trainee-requests" | "subscription-management" | "templates" | "profile-settings">("client-management");
+
+  // Trainee Requests State
+  const [traineeRequests, setTraineeRequests] = useState<CoachTraineeRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+
+  const loadTraineeRequests = async () => {
+    if (!currentUserId) return;
+    setLoadingRequests(true);
+    try {
+      const reqs = await getCoachTraineeRequestsForCoach(currentUserId);
+      setTraineeRequests(reqs);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTraineeRequests();
+  }, [currentUserId]);
 
   // Coach User Profile State
   const [coachProfile, setCoachProfile] = useState<UserDoc | null>(currentUser || null);
@@ -204,6 +227,27 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
 
       if (!existingTrainee) {
         alert(lang === "ar" ? "تعذر العثور على بيانات المستخدم" : "User document not found");
+        return;
+      }
+
+      // If trainee is not yet assigned to this coach, send a request
+      if (existingTrainee.coachId !== currentUserId) {
+        await createCoachTraineeRequest({
+          coachId: currentUserId,
+          coachName: currentUserName,
+          traineeId: targetUid,
+          traineeName: existingTrainee.name,
+          traineePhone: existingTrainee.phone,
+          type: "coach_to_trainee",
+          durationLabel,
+          daysCount
+        });
+
+        alert(
+          lang === "ar"
+            ? `تم إرسال طلب التدريب إلى (${existingTrainee.name}) بنجاح! سيتم ربط الحساب فور قبول المتدرب للطلب.`
+            : `Coaching request sent to ${existingTrainee.name}! The account will be linked once they accept the request.`
+        );
         return;
       }
 
@@ -547,6 +591,25 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
           </button>
           <button
             onClick={() => {
+              setActiveSection("trainee-requests");
+              setSelectedTrainee(null);
+              loadTraineeRequests();
+            }}
+            className={`flex-1 md:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-md transition-all cursor-pointer relative ${
+              activeSection === "trainee-requests"
+                ? "bg-emerald-600 text-neutral-950 shadow-md"
+                : "text-neutral-400 hover:text-white"
+            }`}
+          >
+            <UserCheck className="h-3.5 w-3.5" /> {lang === "ar" ? "طلبات المتدربين" : "Trainee Requests"}
+            {traineeRequests.length > 0 && (
+              <span className="ml-1 bg-amber-500 text-neutral-950 text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold animate-pulse">
+                {traineeRequests.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => {
               setActiveSection("subscription-management");
               setSelectedTrainee(null);
             }}
@@ -648,6 +711,107 @@ export default function CoachDashboard({ currentUserId, currentUserName, current
             alert(lang === "ar" ? "تم حفظ الملاحظات والقياسات بنجاح!" : "Notes and measurements saved successfully!");
           }}
         />
+      )}
+
+      {activeSection === "trainee-requests" && (
+        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-6 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <UserCheck className="text-emerald-400 h-5 w-5" />
+                {lang === "ar" ? "طلبات المتدربين للإنضمام" : "Trainee Join Requests"}
+              </h3>
+              <p className="text-xs text-neutral-400 mt-1">
+                {lang === "ar"
+                  ? "قائمة الطلبات المرسلة إليك من المتدربين من صفحة المدربين. قبول الطلب سيضيف المتدرب إلى قائمة عملائك."
+                  : "List of requests sent to you by trainees. Accepting a request adds the trainee to your client list."}
+              </p>
+            </div>
+            <button
+              onClick={loadTraineeRequests}
+              className="p-2 bg-neutral-950 hover:bg-neutral-800 text-neutral-400 hover:text-white border border-neutral-800 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              {lang === "ar" ? "تحديث" : "Refresh"}
+            </button>
+          </div>
+
+          {loadingRequests ? (
+            <div className="py-12 text-center text-xs text-neutral-400 flex items-center justify-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-500"></div>
+              {lang === "ar" ? "جاري تحميل الطلبات..." : "Loading requests..."}
+            </div>
+          ) : traineeRequests.length === 0 ? (
+            <div className="py-12 text-center bg-neutral-950/60 rounded-xl border border-neutral-800/80 p-8 space-y-3">
+              <div className="mx-auto h-12 w-12 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-500">
+                <Clock className="h-6 w-6" />
+              </div>
+              <h4 className="text-sm font-bold text-white">
+                {lang === "ar" ? "لا توجد طلبات جديدة حالياً" : "No pending trainee requests"}
+              </h4>
+              <p className="text-xs text-neutral-400 max-w-sm mx-auto">
+                {lang === "ar"
+                  ? "عندما يقدم متدرب جديد طلباً لاختيارك كمدربه الخاص، سيظهر طلبه هنا لتتمكن من قبوله أو رفضه."
+                  : "When a trainee selects you as their coach from the All Coaches page, their request will appear here for your approval."}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {traineeRequests.map((req) => (
+                <div key={req.id} className="bg-neutral-950 border border-neutral-800 hover:border-emerald-900/60 rounded-xl p-5 space-y-4 shadow-md transition-all">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/40 px-2 py-0.5 rounded uppercase tracking-wider font-bold">
+                        {lang === "ar" ? "طلب انضمام جديد" : "New Trainee Request"}
+                      </span>
+                      <h4 className="text-sm font-bold text-white mt-1">{req.traineeName}</h4>
+                      {req.traineePhone && (
+                        <p className="text-xs text-neutral-400 font-mono">📱 {req.traineePhone}</p>
+                      )}
+                      <p className="text-[11px] text-neutral-500 font-mono">
+                        {new Date(req.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2 border-t border-neutral-900">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await acceptCoachTraineeRequest(req);
+                          alert(lang === "ar" ? `تم قبول طلب المتدرب (${req.traineeName}) بنجاح!` : `Accepted request from ${req.traineeName}!`);
+                          await loadTraineeRequests();
+                          await loadMyTrainees();
+                        } catch (e) {
+                          alert(lang === "ar" ? "حدث خطأ أثناء قبول الطلب" : "Error accepting request");
+                        }
+                      }}
+                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                    >
+                      <Check className="h-4 w-4" />
+                      {lang === "ar" ? "قبول وربط المتدرب" : "Accept & Link Client"}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await rejectCoachTraineeRequest(req);
+                          alert(lang === "ar" ? "تم رفض الطلب." : "Request declined.");
+                          await loadTraineeRequests();
+                        } catch (e) {
+                          alert(lang === "ar" ? "حدث خطأ أثناء رفض الطلب" : "Error rejecting request");
+                        }
+                      }}
+                      className="py-2 px-3 bg-neutral-800 hover:bg-red-950 hover:text-red-400 border border-neutral-700 text-neutral-300 font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                      {lang === "ar" ? "رفض" : "Reject"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {activeSection === "subscription-management" && (

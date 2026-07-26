@@ -12,7 +12,7 @@ import {
 import { 
   Users, UserCheck, Shield, AlertCircle, RefreshCw, 
   Search, CheckCircle2, XCircle, Award, Calendar, Phone, Mail,
-  Lock, KeyRound, Dumbbell, Apple, Plus, Trash2, Edit2, Save, Video, ClipboardList, UserX,
+  Lock, KeyRound, Dumbbell, Apple, Plus, Trash2, Edit2, Save, Video, ClipboardList, UserX, X,
   Megaphone, History, Sparkles, ShieldAlert, Download, Database,
   Upload, HardDrive, FileText, AlertTriangle, CheckCircle, Server, RefreshCcw, FileCheck, Copy
 } from "lucide-react";
@@ -88,6 +88,8 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
   const [assignCoachId, setAssignCoachId] = useState("");
 
   // User Account Editing Modal States
+  const [userToDelete, setUserToDelete] = useState<UserDoc | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [editingUser, setEditingUser] = useState<UserDoc | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
@@ -278,16 +280,29 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
   };
 
   // User deletion
-  const handleDeleteUser = async (uid: string) => {
-    if (!confirm(getTranslation(lang, "confirmDeleteUser"))) return;
+  const handleDeleteUser = (userOrUid: string | UserDoc) => {
+    if (typeof userOrUid === "object") {
+      setUserToDelete(userOrUid);
+    } else {
+      const found = users.find(u => u.uid === userOrUid);
+      if (found) setUserToDelete(found);
+    }
+  };
+
+  const confirmDeleteUserAction = async () => {
+    if (!userToDelete) return;
+    setIsDeletingUser(true);
     try {
-      await deleteUserDoc(uid);
-      setUsers(prev => prev.filter(u => u.uid !== uid));
-      if (editingUser?.uid === uid) setEditingUser(null);
-      alert("User account deleted successfully");
+      await deleteUserDoc(userToDelete.uid);
+      setUsers(prev => prev.filter(u => u.uid !== userToDelete.uid));
+      if (editingUser?.uid === userToDelete.uid) setEditingUser(null);
+      alert(lang === "ar" ? "تم حذف الحساب نهائياً من قاعدة البيانات!" : "Account permanently deleted from database!");
+      setUserToDelete(null);
     } catch (err) {
       console.error(err);
-      alert("Error deleting user account");
+      alert(lang === "ar" ? "حدث خطأ أثناء حذف الحساب" : "Error deleting user account");
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -2529,6 +2544,58 @@ export default function AdminDashboard({ currentUserId, lang }: AdminDashboardPr
                 className="px-4 py-2 text-xs font-bold text-neutral-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg transition-colors font-sans shadow-lg shadow-emerald-400/20 cursor-pointer"
               >
                 {getTranslation(lang, "saveChanges")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl relative animate-in zoom-in-95">
+            <button
+              onClick={() => setUserToDelete(null)}
+              className="absolute top-4 right-4 text-neutral-400 hover:text-white p-1 rounded-lg cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="text-center space-y-3">
+              <div className="mx-auto h-12 w-12 rounded-full bg-red-950/60 border border-red-800/50 flex items-center justify-center text-red-500">
+                <UserX className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold text-white">
+                {lang === "ar" ? "تأكيد حذف الحساب نهائياً" : "Confirm Delete Account"}
+              </h3>
+              <p className="text-xs text-neutral-300 leading-relaxed bg-neutral-950 p-3 rounded-xl border border-neutral-800">
+                {lang === "ar"
+                  ? `هل أنت أسطوري في قرارك لحذف حساب (${userToDelete.name}) [${userToDelete.role === "coach" ? "مدرب" : "متدرب"}] نهائياً؟ سيتم مسح جميع بياناته بشكل دائم من قاعدة البيانات ولن يعود بعد التحديث.`
+                  : `Are you sure you want to PERMANENTLY delete ${userToDelete.name} (${userToDelete.role})? All account data will be wiped from the database.`}
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setUserToDelete(null)}
+                disabled={isDeletingUser}
+                className="flex-1 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                {lang === "ar" ? "إلغاء" : "Cancel"}
+              </button>
+              <button
+                onClick={confirmDeleteUserAction}
+                disabled={isDeletingUser}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-red-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-red-950/50"
+              >
+                {isDeletingUser ? (
+                  <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    {lang === "ar" ? "تأكيد الحذف" : "Confirm Delete"}
+                  </>
+                )}
               </button>
             </div>
           </div>
