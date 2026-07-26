@@ -63,6 +63,7 @@ export default function AINutritionGenerator({
   const [isGenerating, setIsGenerating] = useState(false);
   const [mealPlan, setMealPlan] = useState<MealPlanResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // --- FOOD REPLACEMENT MODAL STATE ---
   const [replacementModal, setReplacementModal] = useState<{
@@ -234,6 +235,7 @@ export default function AINutritionGenerator({
     });
 
     try {
+      setShowConfirmModal(false);
       await onSavePlanToProgram(dietMealsPayload);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 4000);
@@ -595,19 +597,19 @@ export default function AINutritionGenerator({
             {onSavePlanToProgram && (
               <button
                 type="button"
-                onClick={handleSaveToProgram}
+                onClick={() => setShowConfirmModal(true)}
                 disabled={isSaving}
-                className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
               >
                 {saveSuccess ? (
                   <>
                     <Check className="w-4 h-4 text-white" />
-                    <span>{isAr ? "تم حفظ النظام بالبرنامج التدريبي!" : "Saved to Program!"}</span>
+                    <span>{isAr ? "تم حفظ وإرسال النظام بنجاح!" : "Plan Saved & Sent!"}</span>
                   </>
                 ) : (
                   <>
                     <Save className="w-4 h-4" />
-                    <span>{isAr ? "اعتماد وحفظ بالبرنامج التدريبي للرابط" : "Save Plan to Trainee Program"}</span>
+                    <span>{isAr ? "حفظ وإرسال النظام الغذائي" : "Save Diet & Send to Trainee"}</span>
                   </>
                 )}
               </button>
@@ -785,6 +787,42 @@ export default function AINutritionGenerator({
             ))}
           </div>
 
+          {/* BOTTOM PROMINENT SAVE ACTION BANNER */}
+          {onSavePlanToProgram && (
+            <div className="bg-slate-900 dark:bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  {isAr ? "هل انتهيت من ضبط وتعديل الوجبات؟" : "Finished editing meals?"}
+                </h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  {isAr 
+                    ? "اضغط حفظ النظام الغذائي لإرسال الوجبات المعتمدة فوراً إلى حساب المتدرب"
+                    : "Click Save Diet to send the finalized meal plan directly to the trainee."}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(true)}
+                disabled={isSaving}
+                className="w-full sm:w-auto px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {saveSuccess ? (
+                  <>
+                    <Check className="w-4 h-4 text-slate-950" />
+                    <span>{isAr ? "تم حفظ وإرسال النظام بنجاح!" : "Plan Saved & Sent!"}</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>{isAr ? "حفظ وإرسال النظام الغذائي" : "Save Diet & Send to Trainee"}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
         </div>
       )}
 
@@ -918,6 +956,84 @@ export default function AINutritionGenerator({
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow"
               >
                 {isAr ? "إضافة للوجبة" : "Add to Meal"}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* SAVE DIET CONFIRMATION MODAL */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-6 animate-scaleUp">
+            
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+              <div className="p-3 bg-emerald-950 border border-emerald-800/60 text-emerald-400 rounded-xl">
+                <Save className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {isAr ? "تأكيد حفظ وإرسال النظام الغذائي" : "Confirm Saving & Sending Diet Plan"}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {isAr ? "سيتم حفظ النظام وإرساله مباشرة إلى المتدرب" : "The plan will be saved and immediately sent to the trainee"}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 text-xs">
+              <p className="text-slate-300 leading-relaxed font-medium">
+                {isAr
+                  ? "هل أنت متأكد من حفظ وتأكيد هذا النظام الغذائي التفاعلي وإرساله مباشرة إلى المتدرب؟"
+                  : "Are you sure you want to save this interactive nutrition plan and send it directly to the trainee?"}
+              </p>
+
+              {mealPlan && (
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 font-mono">
+                  <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-slate-500 block text-[10px]">{isAr ? "عدد الوجبات" : "Meals Count"}</span>
+                    <span className="text-white font-bold text-sm">{mealPlan.meals.length} {isAr ? "وجبات" : "meals"}</span>
+                  </div>
+                  <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-slate-500 block text-[10px]">{isAr ? "إجمالي السعرات" : "Total Calories"}</span>
+                    <span className="text-amber-400 font-bold text-sm">{mealPlan.dailyTotals.totalCalories} kcal</span>
+                  </div>
+                  <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800 col-span-2 flex justify-between items-center text-emerald-400">
+                    <span>{isAr ? "توزيع الماكروز:" : "Macros Allocation:"}</span>
+                    <span>P:{mealPlan.dailyTotals.totalProtein}g | C:{mealPlan.dailyTotals.totalCarbs}g | F:{mealPlan.dailyTotals.totalFat}g</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isSaving}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                {isAr ? "إلغاء" : "Cancel"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveToProgram}
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-950"></div>
+                    <span>{isAr ? "جاري الحفظ..." : "Saving..."}</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>{isAr ? "تأكيد وإرسال" : "Confirm & Send"}</span>
+                  </>
+                )}
               </button>
             </div>
 

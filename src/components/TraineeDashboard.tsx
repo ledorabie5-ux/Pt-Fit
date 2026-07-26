@@ -11,6 +11,7 @@ import {
   Video, CheckCircle2, AlertTriangle, Check, User, X, Users, MessageCircle, ExternalLink, Award, Camera, Upload, UserCheck, RefreshCw
 } from "lucide-react";
 import AINutritionGenerator from "./AINutritionGenerator";
+import TraineeDietView from "./TraineeDietView";
 import AllCoachesView from "./AllCoachesView";
 import { Language, getTranslation } from "../utils/translations";
 
@@ -582,33 +583,7 @@ export default function TraineeDashboard({ currentUser, lang, onUserUpdate }: Tr
                     </div>
 
                     {dietSubTab === "assigned" ? (
-                      <div>
-                        {dietMeals.length === 0 ? (
-                          <div className="text-center py-16 border border-dashed border-neutral-800 rounded-xl text-neutral-500 text-xs">
-                            {getTranslation(lang, "noDietPlan")}
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {dietMeals.map(meal => (
-                              <div key={meal.id} className="bg-neutral-950 border border-neutral-800 rounded-xl p-4 flex flex-col justify-between">
-                                <div className="space-y-2">
-                                  <div className="flex justify-between items-start border-b border-neutral-900 pb-2">
-                                    <h5 className="text-xs font-bold text-white">{meal.mealName}</h5>
-                                    {meal.calories && (
-                                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/30 px-2 py-0.5 rounded">
-                                        {meal.calories}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-neutral-300 font-mono whitespace-pre-line leading-relaxed pt-1">
-                                    {meal.foodItems}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      <TraineeDietView dietMeals={dietMeals} lang={lang} />
                     ) : (
                       <AINutritionGenerator
                         initialWeight={currentUser.weight || 75}

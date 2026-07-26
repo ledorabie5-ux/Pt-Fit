@@ -75,6 +75,15 @@ export function cleanObjectForFirestore<T>(obj: T): T {
   return clean as T;
 }
 
+export function firestoreWithTimeout<T>(promise: Promise<T>, timeoutMs = 3500): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Firestore timeout")), timeoutMs)
+    )
+  ]);
+}
+
 export function invalidateMemoryCaches(): void {
   memoryUsersCache = null;
   memoryVideosCache = null;
@@ -279,7 +288,7 @@ export async function getAllUsers(): Promise<UserDoc[]> {
   // C & D. Parallel fetching from Firestore and Supabase
   const supabase = getSupabaseClient();
   const [firestoreRes, supabaseRes] = await Promise.allSettled([
-    db ? getDocs(collection(db, "users")) : Promise.resolve(null),
+    db ? firestoreWithTimeout(getDocs(collection(db, "users"))) : Promise.resolve(null),
     supabase ? supabase.from("users").select("*") : Promise.resolve(null)
   ]);
 
